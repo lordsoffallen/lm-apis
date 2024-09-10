@@ -11,9 +11,9 @@
 
 # lmapis
 
-> Large Model APIs in one place
+> Large Model (Large Language Models, Large Vision Models, Large Audion Models, etc) APIs in one place
 
-A longer description of your project goes here...
+lmapis - **L**arge **M**odel **APIs** in one place. Aims to unify Large Model providers in one place like OpenAI endpoint
 
 
 <!-- pyscaffold-notes -->
