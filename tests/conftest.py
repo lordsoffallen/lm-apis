@@ -1,13 +1,10 @@
 from dotenv import dotenv_values
-from pathlib import Path
 from pytest import fixture
 
 
-PROJECT_PATH = Path(__file__).parent.parent.resolve()   # Main lm-apis dir
-
-
 def _get_env_values():
-    return dotenv_values(PROJECT_PATH, verbose=True)
+    return dotenv_values(verbose=True)
+
 
 @fixture(scope="session")
 def envs():
