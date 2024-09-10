@@ -1,13 +1,12 @@
 # Contributing
 
-Welcome to `lm-apis` contributor's guide.
+Welcome to `lmapis` contributor's guide.
 
 This document focuses on getting any potential contributor familiarized with
 the development processes, but [other kinds of contributions] are also appreciated.
 
 If you are new to using [git] or have never collaborated in a project previously,
-please have a look at [contribution-guide.org]. Other resources are also
-listed in the excellent [guide created by FreeCodeCamp] [^contrib1].
+please have a look at [contribution-guide.org].
 
 Please notice, all users and contributors are expected to be **open,
 considerate, reasonable, and respectful**. When in doubt,
@@ -16,7 +15,7 @@ behavior guidelines.
 
 ## Issue Reports
 
-If you experience bugs or general issues with `lm-apis`, please have a look
+If you experience bugs or general issues with `lmapis`, please have a look
 on the [issue tracker].
 If you don't see anything useful there, please feel free to fire an issue report.
 
@@ -34,10 +33,10 @@ you help us to identify the root cause of the issue.
 
 ## Documentation Improvements
 
-You can help improve `lm-apis` docs by making them more readable and coherent, or
+You can help improve `lmapis` docs by making them more readable and coherent, or
 by adding missing information and correcting mistakes.
 
-`lm-apis` documentation uses [Sphinx] as its main documentation compiler.
+`lmapis` documentation uses [Sphinx] as its main documentation compiler.
 This means that the docs are kept in the same repository as the project code, and
 that any documentation update is done in the same way was a code contribution.
 
@@ -50,7 +49,7 @@ that any documentation update is done in the same way was a code contribution.
 
    :::{tip}
       Please notice that the [GitHub web interface] provides a quick way of
-      propose changes in `lm-apis`'s files. While this mechanism can
+      propose changes in `lmapis`'s files. While this mechanism can
       be tricky for normal code contributions, it works perfectly fine for
       contributing to the docs, and can be quite handy.
 
@@ -102,8 +101,8 @@ source <PATH TO VENV>/bin/activate
 or [Miniconda]:
 
 ```
-conda create -n lm-apis python=3 six virtualenv pytest pytest-cov
-conda activate lm-apis
+conda create -n lmapis python=3 six virtualenv pytest pytest-cov
+conda activate lmapis
 ```
 
 ### Clone the repository
@@ -116,7 +115,7 @@ conda activate lm-apis
 3. Clone this copy to your local disk:
 
    ```
-   git clone git@github.com:YourLogin/lm-apis.git
+   git clone git@github.com:lordsoffallen/lm-apis.git
    cd lm-apis
    ```
 
@@ -135,7 +134,7 @@ conda activate lm-apis
    pre-commit install
    ```
 
-   `lm-apis` comes with a lot of hooks configured to automatically help the
+   `lmapis` comes with a lot of hooks configured to automatically help the
    developer to check the code being written.
 
 ### Implement your changes
@@ -268,7 +267,7 @@ package:
 
 If you are part of the group of maintainers and have correct user permissions
 on [PyPI], the following steps can be used to release a new version for
-`lm-apis`:
+`lmapis`:
 
 1. Make sure all unit tests are successful.
 2. Tag the current commit on the main branch with a release tag, e.g., `v1.2.3`.

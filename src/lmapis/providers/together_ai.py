@@ -1,5 +1,5 @@
-from lm_apis.base import BaseLMApi
-from lm_apis.logging import get_logger
+from lmapis.base import BaseLMApi
+from lmapis.logging import get_logger
 
 import os
 

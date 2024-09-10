@@ -9,7 +9,7 @@
 
 [![Project generated with PyScaffold](https://img.shields.io/badge/-PyScaffold-005CA0?logo=pyscaffold)](https://pyscaffold.org/)
 
-# lm-apis
+# lmapis
 
 > Large Model APIs in one place
 

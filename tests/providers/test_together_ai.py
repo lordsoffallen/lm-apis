@@ -1,4 +1,4 @@
-from lm_apis.providers.together_ai import LMApi
+from lmapis.providers.together_ai import LMApi
 from pytest import raises, mark
 from ..conftest import is_env_set
 

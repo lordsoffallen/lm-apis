@@ -1,4 +1,4 @@
-# lm-apis
+# lmapis
 
 Large Model APIs in one place
 

@@ -1,4 +1,4 @@
-from lm_apis.providers.google import LMApi
+from lmapis.providers.google import LMApi
 from ..conftest import is_env_set
 from pytest import raises, mark
 from os import environ
