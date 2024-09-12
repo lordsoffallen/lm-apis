@@ -1,8 +1,8 @@
-from typing import Literal
+from typing import Literal, Any
 from dataclasses import dataclass, field, asdict
+from openai.types.chat import ChatCompletion
 
 import os
-
 
 
 def get_api_key_from_env(name: str) -> str:
@@ -54,8 +54,18 @@ class User(BaseMessage):
 
 
 @dataclass
-class Assistant(BaseMessage):       # TODO extend support later
+class Assistant(BaseMessage):
     role: str = field(default="assistant", init=False)
+    function_call: Any = None
+    tool_calls: Any = None
+    refusal: str = None
+
+    @classmethod
+    def from_model_response(cls, output: ChatCompletion) -> "Assistant":
+        response = output.choices[0].message.to_dict()
+        response.pop("role")  # Remove role as it's not required
+
+        return cls(**response)
 
 
 @dataclass
