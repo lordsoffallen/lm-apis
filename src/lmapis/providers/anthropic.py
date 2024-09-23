@@ -30,7 +30,7 @@ class CompletionsAnthropic(utils.Messages):
     @staticmethod
     def warn_for_non_supported_params(*args):
         for arg in args:
-            if arg != utils.NOT_GIVEN:
+            if arg != NOT_GIVEN:
                 raise ValueError(f"{arg} is not supported in Anthropic")
 
     def create(
@@ -56,7 +56,7 @@ class CompletionsAnthropic(utils.Messages):
         temperature: Optional[float] | NotGiven = NOT_GIVEN,
         tool_choice: utils.message_create_params.ToolChoice | NotGiven = NOT_GIVEN,
         tools: Iterable[utils.ToolParam] | NotGiven = NOT_GIVEN,
-        top_logprobs: Optional[int] |  NotGiven = utils.NOT_GIVEN,
+        top_logprobs: Optional[int] |  NotGiven = NOT_GIVEN,
         top_p: Optional[float] | NotGiven = NOT_GIVEN,
         top_k: int | NotGiven = NOT_GIVEN,  # ANTHROPIC SPECIFIC PARAM
         user: str | NotGiven = NOT_GIVEN,
@@ -101,12 +101,16 @@ class CompletionsAnthropic(utils.Messages):
                 stacklevel=3,
             )
 
-        system = NOT_GIVEN
+        system = []
 
-        for m in messages:
+        for m in messages[:]:   # remove breaks the loop in vanilla iter so we copy here
             if m["role"] == "system":
-                system = m["content"]      # extract system prompt from the messages
+                # extract system prompt from the messages
+                system.append({"type": "text", "text": m["content"]})
                 messages.remove(m)      # noqa
+
+        if len(system) == 0:
+            system = NOT_GIVEN
 
         response = self._post(
             "/v1/messages",
@@ -115,7 +119,7 @@ class CompletionsAnthropic(utils.Messages):
                     "max_tokens": max_tokens,
                     "messages": messages,
                     "model": model,
-                    "metadata": utils.NOT_GIVEN,
+                    "metadata": NOT_GIVEN,
                     "stop_sequences": stop,
                     "stream": stream,
                     "system": system,
