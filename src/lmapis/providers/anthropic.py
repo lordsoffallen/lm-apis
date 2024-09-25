@@ -42,7 +42,7 @@ class CompletionsAnthropic(utils.Messages):
         functions: Iterable[Any] | NotGiven = NOT_GIVEN,
         logit_bias: Optional[Dict[str, int]] | NotGiven = NOT_GIVEN,
         logprobs: Optional[bool] | NotGiven = NOT_GIVEN,
-        max_tokens: int | Literal[4096] | Literal[8192] = 8192,
+        max_tokens: int = NOT_GIVEN,
         n: Optional[int] | NotGiven = NOT_GIVEN,
         parallel_tool_calls: bool | NotGiven = NOT_GIVEN,
         presence_penalty: Optional[float] | NotGiven = NOT_GIVEN,
@@ -84,8 +84,9 @@ class CompletionsAnthropic(utils.Messages):
             user
         )
 
-        if not model.startswith("claude-3-5"):
-            max_tokens = 4096   # Other models support less max tokens
+        if max_tokens == NOT_GIVEN:
+            # Auto infer max tokens as it is a required arg for claude
+            max_tokens = 8192 if model.startswith("claude-3-5") else 4096
 
         if (not utils.is_given(timeout) and
             self._client.timeout == utils.DEFAULT_TIMEOUT):
