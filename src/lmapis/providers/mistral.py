@@ -1,6 +1,6 @@
 from lmapis.base import BaseLMApi
 from lmapis.utils import get_api_key_from_env
-from mistralai import Mistral
+from mistralai import Mistral, Chat
 
 
 class LMApi(BaseLMApi):
@@ -20,4 +20,13 @@ class LMApi(BaseLMApi):
                 api_key=self.api_key,
                 **self.kwargs
             )
+            self._client.chat.completions = CompletionsMistral(self._client.chat)
         return self._client
+
+
+class CompletionsMistral(Chat):
+    def __init__(self, chat_client: Chat):
+        self.chat_client = chat_client
+
+    def create(self, *args, **kwargs):
+        return self.chat_client.complete(*args, **kwargs)
