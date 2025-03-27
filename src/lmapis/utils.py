@@ -29,13 +29,13 @@ class ImageContent:
 @dataclass
 class TextContent:
     text: str
-    type = "text"
+    type: str = field(default="text", init=False)
 
 
 @dataclass
 class BaseMessage:
     role: str
-    content: str    # TODO add image support later TextContent | ImageContent
+    content: str | list[TextContent | ImageContent]
 
 
 def Messages(*args) -> list[dict]:  # noqa
