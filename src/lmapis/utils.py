@@ -29,13 +29,13 @@ class ImageContent:
 @dataclass
 class TextContent:
     text: str
-    type = "text"
+    type: str = field(default="text", init=False)
 
 
 @dataclass
 class BaseMessage:
     role: str
-    content: str    # TODO add image support later TextContent | ImageContent
+    content: str | list[TextContent | ImageContent]
 
 
 def Messages(*args) -> list[dict]:  # noqa
@@ -53,7 +53,7 @@ class User(BaseMessage):
     role: str = field(default="user", init=False)
 
 
-@dataclass
+@dataclass()
 class Assistant(BaseMessage):
     role: str = field(default="assistant", init=False)
     function_call: Any = None
@@ -62,8 +62,15 @@ class Assistant(BaseMessage):
 
     @classmethod
     def from_model_response(cls, output: ChatCompletion) -> "Assistant":
-        response = output.choices[0].message.to_dict()
+        try:
+            response = output.choices[0].message.to_dict()
+        except AttributeError as e:
+            response = output.choices[0].message.model_dump(mode="python")
+
         response.pop("role")  # Remove role as it's not required
+
+        if "prefix" in response.keys():
+            response.pop("prefix")
 
         return cls(**response)
 
