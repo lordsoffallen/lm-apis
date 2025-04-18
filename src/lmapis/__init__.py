@@ -1,11 +1,5 @@
-from importlib.metadata import PackageNotFoundError, version  # pragma: no cover
-
-
 try:
-    # Change here if project is renamed and does not equal the package name
-    dist_name = "lmapis"
-    __version__ = version(dist_name)
-except PackageNotFoundError:  # pragma: no cover
-    __version__ = "unknown"
-finally:
-    del version, PackageNotFoundError
+    from ._version import version as __version__
+except ImportError:
+    # If the package is not installed with setuptools_scm
+    __version__ = "0.0.0"

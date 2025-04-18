@@ -1,9 +1,48 @@
 [build-system]
-# AVOID CHANGING REQUIRES: IT WILL BE UPDATED BY PYSCAFFOLD!
-requires = ["setuptools>=46.1.0", "setuptools_scm[toml]>=5"]
+requires = ["setuptools>=42", "wheel", "setuptools_scm>=6.2"]
 build-backend = "setuptools.build_meta"
 
+[project]
+name = "lmapis"
+description = "Large Model APIs in one place"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "lordsoffallen", email = "email@example.com"},
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "openai>=1.58.1",
+    "anthropic>=0.36.0,<0.41.0",
+    "structlog>=24.4.0",
+    "tenacity>=9.0.0",
+    "google-cloud-aiplatform>=1.75.0",
+    "mistralai>=1.2.6",
+]
+dynamic = ["version"]
+
 [tool.setuptools_scm]
-# For smarter version schemes and other configuration options,
-# check out https://github.com/pypa/setuptools_scm
-version_scheme = "no-guess-dev"
+# Uses git tags and commits for versioning
+write_to = "src/lmapis/_version.py"
+# This format will create versions like: 0.1.0.dev123+g12ab34cd.d20230101
+version_scheme = "post-release"
+local_scheme = "node-and-date"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/lordsoffallen/lm-apis"
+"Bug Tracker" = "https://github.com/lordsoffallen/lm-apis/issues"
