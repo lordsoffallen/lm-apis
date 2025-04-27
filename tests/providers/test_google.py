@@ -1,4 +1,4 @@
-from lmapis.providers.google import LMApi
+from lmapis.providers.google import LMApi, AsyncLMApi
 from ..conftest import is_env_set
 from pytest import raises, mark
 from os import environ
@@ -47,6 +47,26 @@ def test_api_key(envs):
     )
 
     response = llm.client.chat.completions.create(
+        model="google/gemini-1.5-flash-001",
+        messages=[{"role": "user", "content": "Why is the sky blue?"}]
+    )
+
+    print(response)
+
+
+@mark.asyncio
+@mark.skipif(
+    not (_is_gcp_project_available() and _is_gcp_api_key_available()),
+    reason="Test requires project id to run"
+)
+async def test_api_async(envs):
+    llm = AsyncLMApi(
+        region="europe-west1",
+        project_id=envs["GOOGLE_PROJECT_ID"],
+        api_key=envs["GOOGLE_API_KEY"]
+    )
+
+    response = await llm.client.chat.completions.create(
         model="google/gemini-1.5-flash-001",
         messages=[{"role": "user", "content": "Why is the sky blue?"}]
     )
