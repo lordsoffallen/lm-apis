@@ -1,13 +1,18 @@
 from lmapis.base import BaseLMApi, BaseAsyncLMApi
 from lmapis.utils import get_api_key_from_env
 from anthropic import Anthropic, AsyncAnthropic
+from anthropic.types import TextBlock, ToolUseBlock
 from anthropic.resources import messages as utils   # refer module functions
 from anthropic import NOT_GIVEN, NotGiven
 from typing import Optional, Literal, Iterable, Any, Dict, Union, List
 from openai.types.chat.chat_completion import ChatCompletion, Choice
 from openai.types.chat import ChatCompletionMessage
+from openai.types.chat.chat_completion_message_tool_call import \
+    ChatCompletionMessageToolCall, Function
 from openai.types import CompletionUsage
 from time import time
+
+import json
 
 
 class LMApi(BaseLMApi):
@@ -157,6 +162,23 @@ class CompletionsAnthropic(utils.Messages):
             "stop_sequence": "stop",
         }
 
+        text_content = None
+        tool_calls = []
+
+        for r in response.content:
+            if isinstance(r, TextBlock):
+                text_content = r.text
+            if isinstance(r, ToolUseBlock):
+                tool_content = ChatCompletionMessageToolCall(
+                    id=r.id,
+                    function=Function(
+                        name=r.name,
+                        arguments=json.dumps(r.input),
+                    ),
+                    type="function"
+                )
+                tool_calls.append(tool_content)
+
         return ChatCompletion(
             id=response.id,
             choices=[
@@ -164,13 +186,10 @@ class CompletionsAnthropic(utils.Messages):
                     finish_reason=reason_mapping[response.stop_reason],
                     index=0,
                     message=ChatCompletionMessage(
-                        # We assume it's always text type for now.
-                        content=response.content[0].text,
+                        content=text_content,
                         role=response.role,
-                        # TODO may add support later for tool calling
+                        tool_calls=tool_calls
                         # refusal=,
-                        # function_call,
-                        # tool_calls,
                     ),
                 )
             ],
@@ -347,6 +366,23 @@ class AsyncCompletionsAnthropic(utils.AsyncMessages):
             "stop_sequence": "stop",
         }
 
+        text_content = None
+        tool_calls = []
+
+        for r in response.content:
+            if isinstance(r, TextBlock):
+                text_content = r.text
+            if isinstance(r, ToolUseBlock):
+                tool_content = ChatCompletionMessageToolCall(
+                    id=r.id,
+                    function=Function(
+                        name=r.name,
+                        arguments=json.dumps(r.input),
+                    ),
+                    type="function"
+                )
+                tool_calls.append(tool_content)
+
         return ChatCompletion(
             id=response.id,
             choices=[
@@ -354,13 +390,10 @@ class AsyncCompletionsAnthropic(utils.AsyncMessages):
                     finish_reason=reason_mapping[response.stop_reason],
                     index=0,
                     message=ChatCompletionMessage(
-                        # We assume it's always text type for now.
-                        content=response.content[0].text,
+                        content=text_content,
                         role=response.role,
-                        # TODO may add support later for tool calling
+                        tool_calls=tool_calls
                         # refusal=,
-                        # function_call,
-                        # tool_calls,
                     ),
                 )
             ],
