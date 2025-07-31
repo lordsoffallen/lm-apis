@@ -1,4 +1,5 @@
 from lmapis.providers.anthropic import LMApi, AsyncLMApi
+from lmapis.utils import Assistant
 from pytest import raises, mark
 from ..conftest import is_env_set
 
@@ -20,6 +21,44 @@ def test_api(envs):
     )
 
     print(response)
+
+
+@mark.skipif(
+    not is_env_set("ANTHROPIC_API_KEY"), reason="Test requires anthropic api key to run"
+)
+def test_api_response_parsing(envs):
+    llm = LMApi(api_key=envs["ANTHROPIC_API_KEY"])
+
+    response = llm.client.chat.completions.create(
+        model="claude-3-haiku-20240307",
+        messages=[{"role": "user", "content": "Why is the sky blue?"}]
+    )
+
+    # Test response parsing
+    assistant = Assistant.from_model_response(response)
+    print(assistant)
+
+
+@mark.skipif(
+    not is_env_set("ANTHROPIC_API_KEY"), reason="Test requires anthropic api key to run"
+)
+def test_api_image_response_error(envs):
+    llm = LMApi(api_key=envs["ANTHROPIC_API_KEY"])
+
+    with raises(NotImplementedError):
+        llm.client.chat.completions.create(
+            model="claude-3-haiku-20240307",
+            messages=[{
+                "role": "user",
+                "content": {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": "test-image-url.com",
+                        "detail": "auto"
+                    }
+                }
+            }]
+        )
 
 
 @mark.asyncio

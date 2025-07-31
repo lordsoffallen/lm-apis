@@ -1,6 +1,6 @@
 from typing import Literal, Any
 from dataclasses import dataclass, field, asdict
-from openai.types.chat import ChatCompletion
+from openai.types.chat import ChatCompletion, ChatCompletionMessageToolCall
 
 import os
 
@@ -23,7 +23,7 @@ class ImageURL:
 @dataclass
 class ImageContent:
     image_url: ImageURL
-    type: str
+    type: str = field(default="image_url", init=False)
 
 
 @dataclass
@@ -33,9 +33,15 @@ class TextContent:
 
 
 @dataclass
+class RefusalContent:
+    refusal: str
+    type: str = field(default="refusal", init=False)
+
+
+@dataclass
 class BaseMessage:
     role: str
-    content: str | list[TextContent | ImageContent]
+    content: str | list[TextContent | ImageContent | RefusalContent] | None
 
 
 def Messages(*args) -> list[dict]:  # noqa
@@ -53,11 +59,11 @@ class User(BaseMessage):
     role: str = field(default="user", init=False)
 
 
-@dataclass()
+@dataclass
 class Assistant(BaseMessage):
     role: str = field(default="assistant", init=False)
-    function_call: Any = None
-    tool_calls: Any = None
+    function_call: Any = None   # deprecated
+    tool_calls: Any | list[ChatCompletionMessageToolCall] = None
     refusal: str = None
 
     @classmethod

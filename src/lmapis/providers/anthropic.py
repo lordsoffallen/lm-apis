@@ -1,12 +1,13 @@
 from lmapis.base import BaseLMApi, BaseAsyncLMApi
 from lmapis.utils import get_api_key_from_env
 from anthropic import Anthropic, AsyncAnthropic
-from anthropic.types import TextBlock, ToolUseBlock
+from anthropic.types import TextBlock, ToolUseBlock, ToolUseBlockParam, ToolResultBlockParam
 from anthropic.resources import messages as utils   # refer module functions
 from anthropic import NOT_GIVEN, NotGiven
 from typing import Optional, Literal, Iterable, Any, Dict, Union, List
 from openai.types.chat.chat_completion import ChatCompletion, Choice
-from openai.types.chat import ChatCompletionMessage
+from openai.types.chat import ChatCompletionMessage, ChatCompletionMessageParam, \
+    ChatCompletionToolParam
 from openai.types.chat.chat_completion_message_tool_call import \
     ChatCompletionMessageToolCall, Function
 from openai.types import CompletionUsage
@@ -31,6 +32,106 @@ class LMApi(BaseLMApi):
         return self._client
 
 
+def _convert_single_message(
+    msg: ChatCompletionMessageParam | dict
+) -> utils.MessageParam | dict:
+    # TODO image converting is not supported yet
+    if not isinstance(msg["content"], str):
+        try:
+            if msg["content"].get("type") == "image_url":
+                raise NotImplementedError("Image parsing is not implemented yet")
+        except AttributeError as e:
+            # get method does not exist, ideally not image content
+            pass
+
+    if msg["role"] == "tool":
+        return utils.MessageParam(
+            role="user",
+            content=[
+                ToolResultBlockParam(
+                    type="tool_result",
+                    tool_use_id=msg["tool_call_id"],
+                    content=msg["content"],
+                    # Infer if message contains error message or not
+                    is_error=True if "error" in msg["content"].lower() else False
+                )
+            ]
+        )
+    elif msg["role"] == "assistant" and "tool_calls" in msg:
+        message_content = []
+        if msg["content"]:
+            message_content.append(TextBlock(type="text", text=msg["content"]))
+
+        for tool_call in msg["tool_calls"]:
+            tool_input = (
+                tool_call["function"]["arguments"]
+                if isinstance(tool_call, dict)
+                else tool_call.function.arguments
+            )
+            message_content.append(
+                ToolUseBlockParam(
+                    type="tool_use",
+                    input=json.loads(tool_input),
+                    id=tool_call["id"] if isinstance(tool_call, dict) else tool_call.id,
+                    name=tool_call["function"]["name"]
+                        if isinstance(tool_call, dict)
+                        else tool_call.function.name
+                )
+            )
+        return utils.MessageParam(
+            role="assistant", content=message_content
+        )
+    return utils.MessageParam(
+        role= msg["role"], content=msg["content"]
+    )
+
+
+def convert_messages(
+    messages: Iterable[ChatCompletionMessageParam]
+) -> tuple[list[TextBlock], Iterable[utils.MessageParam]]:
+    system = []
+
+    for m in messages[:]:  # remove breaks the loop in vanilla iter so we copy here
+        if m["role"] == "system":
+            # extract system prompt from the messages
+            system.append({"type": "text", "text": m["content"]})
+            messages.remove(m)  # noqa
+
+    if len(system) == 0:
+        system = NOT_GIVEN
+
+    converted_messages = [_convert_single_message(msg) for msg in messages]
+
+    return system, converted_messages
+
+
+def convert_tools(
+    tools: Iterable[ChatCompletionToolParam] | dict | None
+) -> Iterable[utils.ToolParam] | None:
+    anthropic_tools = []
+
+    if tools is None or tools == NOT_GIVEN:
+        return NOT_GIVEN
+
+    for tool in tools:
+        if tool.get("type") != "function":
+            continue
+
+        function = tool["function"]
+        anthropic_tool = utils.ToolParam(
+            name=function["name"],
+            description= function["description"],
+            input_schema={
+                "type": "object",
+                "properties": function["parameters"]["properties"],
+                "required": function["parameters"].get("required", []),
+            }
+        )
+        anthropic_tools.append(anthropic_tool)
+
+    return anthropic_tools
+
+
 class CompletionsAnthropic(utils.Messages):
     @staticmethod
     def warn_for_non_supported_params(*args):
@@ -40,7 +141,7 @@ class CompletionsAnthropic(utils.Messages):
 
     def create(
         self,
-        messages: Iterable[utils.MessageParam],
+        messages: Iterable[ChatCompletionMessageParam],
         model: utils.ModelParam,
         frequency_penalty: Optional[float] | NotGiven = NOT_GIVEN,
         function_call: NotGiven = NOT_GIVEN,
@@ -60,7 +161,7 @@ class CompletionsAnthropic(utils.Messages):
         stream_options: NotGiven = NOT_GIVEN,
         temperature: Optional[float] | NotGiven = NOT_GIVEN,
         tool_choice: utils.message_create_params.ToolChoice | NotGiven = NOT_GIVEN,
-        tools: Iterable[utils.ToolParam] | NotGiven = NOT_GIVEN,
+        tools: Iterable[ChatCompletionToolParam] | NotGiven = NOT_GIVEN,
         top_logprobs: Optional[int] |  NotGiven = NOT_GIVEN,
         top_p: Optional[float] | NotGiven = NOT_GIVEN,
         top_k: int | NotGiven = NOT_GIVEN,  # ANTHROPIC SPECIFIC PARAM
@@ -107,16 +208,8 @@ class CompletionsAnthropic(utils.Messages):
                 stacklevel=3,
             )
 
-        system = []
-
-        for m in messages[:]:   # remove breaks the loop in vanilla iter so we copy here
-            if m["role"] == "system":
-                # extract system prompt from the messages
-                system.append({"type": "text", "text": m["content"]})
-                messages.remove(m)      # noqa
-
-        if len(system) == 0:
-            system = NOT_GIVEN
+        tools = convert_tools(tools)
+        system, messages = convert_messages(messages)
 
         response = self._post(
             "/v1/messages",
@@ -244,7 +337,7 @@ class AsyncCompletionsAnthropic(utils.AsyncMessages):
 
     async def create(
         self,
-        messages: Iterable[utils.MessageParam],
+        messages: Iterable[ChatCompletionMessageParam],
         model: utils.ModelParam,
         frequency_penalty: Optional[float] | NotGiven = NOT_GIVEN,
         function_call: NotGiven = NOT_GIVEN,
@@ -264,7 +357,7 @@ class AsyncCompletionsAnthropic(utils.AsyncMessages):
         stream_options: NotGiven = NOT_GIVEN,
         temperature: Optional[float] | NotGiven = NOT_GIVEN,
         tool_choice: utils.message_create_params.ToolChoice | NotGiven = NOT_GIVEN,
-        tools: Iterable[utils.ToolParam] | NotGiven = NOT_GIVEN,
+        tools: Iterable[ChatCompletionToolParam] | NotGiven = NOT_GIVEN,
         top_logprobs: Optional[int] |  NotGiven = NOT_GIVEN,
         top_p: Optional[float] | NotGiven = NOT_GIVEN,
         top_k: int | NotGiven = NOT_GIVEN,  # ANTHROPIC SPECIFIC PARAM
@@ -311,16 +404,8 @@ class AsyncCompletionsAnthropic(utils.AsyncMessages):
                 stacklevel=3,
             )
 
-        system = []
-
-        for m in messages[:]:   # remove breaks the loop in vanilla iter so we copy here
-            if m["role"] == "system":
-                # extract system prompt from the messages
-                system.append({"type": "text", "text": m["content"]})
-                messages.remove(m)      # noqa
-
-        if len(system) == 0:
-            system = NOT_GIVEN
+        tools = convert_tools(tools)
+        system, messages = convert_messages(messages)
 
         response = await self._post(
             "/v1/messages",
