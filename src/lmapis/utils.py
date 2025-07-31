@@ -78,8 +78,22 @@ class Assistant(BaseMessage):
         if "prefix" in response.keys():
             response.pop("prefix")
 
+        tool_calls = response.get("tool_calls")
+        if tool_calls is not None:
+            # Parse into open ai type from dict here
+            if not isinstance(tool_calls, list):
+                tool_calls = [tool_calls]
+            tool_calls = [ChatCompletionMessageToolCall(**tc) for tc in tool_calls]
+            response["tool_calls"] = tool_calls
+
         return cls(**response)
 
+    def asdict(self) -> dict:
+        d = asdict(self)
+        d = {k:v for k, v in d.items() if v is not None}
+        if "tool_calls" in d.keys():
+            # Parse pydantic as dict here
+            d["tool_calls"] = [i.model_dump(mode="python") for i in d["tool_calls"]]
 
 @dataclass
 class Tool(BaseMessage):

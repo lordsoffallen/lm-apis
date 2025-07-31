@@ -1,3 +1,5 @@
+import json
+
 from lmapis.providers.anthropic import LMApi, AsyncLMApi
 from lmapis.utils import Assistant
 from pytest import raises, mark
@@ -154,3 +156,32 @@ def test_tool_calls(envs):
     assert "str_replace_editor" == response.choices[0].message.tool_calls[0].function.name
 
     print(response)
+
+
+@mark.skipif(
+    not is_env_set("ANTHROPIC_API_KEY"), reason="Test requires anthropic api key to run"
+)
+def test_response_asdict(envs):
+    llm = LMApi(api_key=envs["ANTHROPIC_API_KEY"])
+
+    response = llm.client.chat.completions.create(
+        model="claude-3-7-sonnet-20250219",
+        messages=[
+            {
+                "role": "user",
+                "content": "There's a syntax error in my primes.py file. Can you help me fix it?"
+            }
+        ],
+        max_tokens=500,
+        tools=[
+            {
+                "type": "text_editor_20250124",
+                "name": "str_replace_editor"
+            }
+        ],
+    )
+
+    assistant = Assistant.from_model_response(response)
+    d = assistant.asdict()
+    # Check if we can dump as json
+    j = json.dumps(d)
