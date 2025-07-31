@@ -106,7 +106,7 @@ def convert_messages(
 
 
 def convert_tools(
-    tools: Iterable[ChatCompletionToolParam] | dict | None
+    tools: Iterable[ChatCompletionToolParam] | dict | Any | None
 ) -> Iterable[utils.ToolParam] | None:
     anthropic_tools = []
 
@@ -115,6 +115,7 @@ def convert_tools(
 
     for tool in tools:
         if tool.get("type") != "function":
+            anthropic_tools.append(tool)    # Anthropic specific tools so we pass as is
             continue
 
         function = tool["function"]
