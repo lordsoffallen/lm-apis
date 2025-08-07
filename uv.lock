@@ -332,6 +332,15 @@ wheels = [
 ]
 
 [[package]]
+name = "fsspec"
+version = "2025.7.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/8b/02/0835e6ab9cfc03916fe3f78c0956cfcdb6ff2669ffa6651065d5ebf7fc98/fsspec-2025.7.0.tar.gz", hash = "sha256:786120687ffa54b8283d942929540d8bc5ccfa820deb555a2b5d0ed2b737bf58", size = 304432 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2f/e0/014d5d9d7a4564cf1c40b5039bc882db69fd881111e03ab3657ac0b218e2/fsspec-2025.7.0-py3-none-any.whl", hash = "sha256:8b012e39f63c7d5f10474de957f3ab793b47b45ae7d39f2fb735f8bbe25c0e21", size = 199597 },
+]
+
+[[package]]
 name = "google-api-core"
 version = "2.25.1"
 source = { registry = "https://pypi.org/simple" }
@@ -752,10 +761,11 @@ wheels = [
 
 [[package]]
 name = "lmapis"
-version = "0.1.dev32+g5c024c5.d20250807"
+version = "0.1.dev43+g995c1b4.d20250807"
 source = { editable = "." }
 dependencies = [
     { name = "anthropic" },
+    { name = "fsspec" },
     { name = "google-cloud-aiplatform" },
     { name = "mistralai" },
     { name = "openai" },
@@ -785,6 +795,7 @@ requires-dist = [
     { name = "black", marker = "extra == 'dev'", specifier = ">=23.0.0" },
     { name = "coverage", marker = "extra == 'dev'", specifier = ">=7.0.0" },
     { name = "dotenv", marker = "extra == 'dev'" },
+    { name = "fsspec", specifier = ">=2023.1.0" },
     { name = "google-cloud-aiplatform", specifier = ">=1.75.0" },
     { name = "isort", marker = "extra == 'dev'", specifier = ">=5.12.0" },
     { name = "mistralai", specifier = ">=1.2.6" },
