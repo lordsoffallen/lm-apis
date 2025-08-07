@@ -60,3 +60,4 @@ MANIFEST
 tmp
 
 .kiro
+src/lmapis/_version.py
