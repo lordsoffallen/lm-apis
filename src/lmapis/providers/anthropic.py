@@ -1,5 +1,5 @@
 from lmapis.base import BaseLMApi, BaseAsyncLMApi
-from lmapis.utils import get_api_key_from_env
+from lmapis.utils.auth import get_api_key_from_env
 from anthropic import Anthropic, AsyncAnthropic
 from anthropic.types import TextBlock, ToolUseBlock, ToolUseBlockParam, ToolResultBlockParam
 from anthropic.resources import messages as utils   # refer module functions

@@ -1,5 +1,5 @@
 from lmapis.base import BaseLMApi, BaseAsyncLMApi
-from lmapis.utils import get_api_key_from_env
+from lmapis.utils.auth import get_api_key_from_env
 from mistralai import Mistral, Chat, SDKError
 
 import time
