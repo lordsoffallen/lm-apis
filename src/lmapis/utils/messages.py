@@ -1,29 +1,9 @@
-from typing import Literal, Any
+from typing import Any
 from dataclasses import dataclass, field, asdict
 from openai.types.chat import ChatCompletion, ChatCompletionMessageToolCall
+from copy import deepcopy
 
-import os
-
-
-def get_api_key_from_env(name: str) -> str:
-    try:
-       return os.environ[name]
-    except KeyError:
-        raise ValueError(
-            f"{name} required. Either set {name} as env variable or pass the api_key"
-        )
-
-
-@dataclass
-class ImageURL:
-    url: str  # Either a URL of the image or the base64 encoded image data.
-    detail: Literal["auto", "low", "high"]
-
-
-@dataclass
-class ImageContent:
-    image_url: ImageURL
-    type: str = field(default="image_url", init=False)
+from .images import ImageContent
 
 
 @dataclass
@@ -42,11 +22,6 @@ class RefusalContent:
 class BaseMessage:
     role: str
     content: str | list[TextContent | ImageContent | RefusalContent] | None
-
-
-def Messages(*args) -> list[dict]:  # noqa
-    """ Use this method to encapsulate API call endpoint for dataclasses"""
-    return [asdict(arg) for arg in args]
 
 
 @dataclass
@@ -95,6 +70,7 @@ class Assistant(BaseMessage):
             # Parse pydantic as dict here
             d["tool_calls"] = [i.model_dump(mode="python") for i in d["tool_calls"]]
 
+
 @dataclass
 class Tool(BaseMessage):
     role: str = field(default="tool", init=False)
@@ -105,3 +81,26 @@ class Tool(BaseMessage):
 class Function(BaseMessage):
     role: str = field(default="function", init=False)
     name: str
+
+
+class Messages:
+    def __init__(self):
+        self.messages: list[dict[str, Any]] = []
+
+    def add_message(self, message: BaseMessage = None) -> Messages:
+        new_copy = deepcopy(self)  # Create a copy first
+        if message is not None:
+            if (message.content is not None) and (message.content != ""):
+                new_copy.messages.append(asdict(message))  # Modify the copy
+        return new_copy  # Return the modified copy
+
+    def __rshift__(self, other: BaseMessage = None) -> Messages:
+        """Implements the >> operator"""
+        return self.add_message(other)
+
+    def __str__(self) -> str:
+        """String representation of the messages"""
+        return "\n".join(f"{msg['role']}: {msg['content']}" for msg in self.messages)
+
+    def get(self):
+        return self.messages
