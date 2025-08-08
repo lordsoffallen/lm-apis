@@ -87,14 +87,14 @@ class Messages:
     def __init__(self):
         self.messages: list[dict[str, Any]] = []
 
-    def add_message(self, message: BaseMessage = None) -> Messages:
+    def add_message(self, message: BaseMessage = None) -> "Messages":
         new_copy = deepcopy(self)  # Create a copy first
         if message is not None:
             if (message.content is not None) and (message.content != ""):
                 new_copy.messages.append(asdict(message))  # Modify the copy
         return new_copy  # Return the modified copy
 
-    def __rshift__(self, other: BaseMessage = None) -> Messages:
+    def __rshift__(self, other: BaseMessage = None) -> "Messages":
         """Implements the >> operator"""
         return self.add_message(other)
 

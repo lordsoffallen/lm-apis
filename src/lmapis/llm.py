@@ -135,7 +135,7 @@ class LLM:
         except Exception as log_error:
             logger.warning(f"Failed to log LLM interaction: {log_error}")
 
-    def _get_messages(self, messages: Messages, prefill_response: Assistant = None) -> Messages:
+    def _get_messages(self, msgs: Messages, prefill_response: Assistant = None) -> Messages:
         # Prepare messages for the API call
         if "claude" in self.model:
             # Claude supports assistant prefill response
