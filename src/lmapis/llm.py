@@ -4,9 +4,9 @@ from .utils.retry import should_retry_exception
 from textwrap import dedent
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception
 from typing import Any, Optional
+
 import time
 import uuid
-
 import importlib
 
 
@@ -135,7 +135,7 @@ class LLM:
         except Exception as log_error:
             logger.warning(f"Failed to log LLM interaction: {log_error}")
 
-    def _get_messages(self, messages: Messages) -> Messages:
+    def _get_messages(self, messages: Messages, prefill_response: Assistant = None) -> Messages:
         # Prepare messages for the API call
         if "claude" in self.model:
             # Claude supports assistant prefill response
@@ -175,7 +175,7 @@ class LLM:
         # Generate unique request ID for this interaction
         request_id = f"req_{uuid.uuid4().hex[:8]}"
         start_time = time.time()
-        messages = self._get_messages(msgs)
+        messages = self._get_messages(msgs, prefill_response)
         
         response = None
         error = None
