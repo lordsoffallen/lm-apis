@@ -1,6 +1,6 @@
 from lmapis.base import BaseLMApi, BaseAsyncLMApi
 from lmapis.utils.auth import get_api_key_from_env
-from mistralai import Mistral, Chat, SDKError
+from mistralai import Mistral, Chat
 
 import time
 
@@ -31,13 +31,7 @@ class CompletionsMistral(Chat):
         self.chat_client = chat_client
 
     def create(self, *args, **kwargs):
-        try:
-            return self.chat_client.complete(*args, **kwargs)
-        except SDKError as e:
-            if e.status_code == 429:
-                time.sleep(1.1)     # sleep 1 second, mistral does 1rps
-                return self.chat_client.complete(*args, **kwargs)
-            raise e
+        return self.chat_client.complete(*args, **kwargs)
 
 
 class AsyncLMApi(BaseAsyncLMApi):
@@ -63,10 +57,4 @@ class AsyncLMApi(BaseAsyncLMApi):
 
 class AsyncCompletionsMistral(CompletionsMistral):
     def create(self, *args, **kwargs):
-        try:
-            return self.chat_client.complete_async(*args, **kwargs)
-        except SDKError as e:
-            if e.status_code == 429:
-                time.sleep(1.1)     # sleep 1 second, mistral does 1rps
-                return self.chat_client.complete_async(*args, **kwargs)
-            raise e
+        return self.chat_client.complete_async(*args, **kwargs)
