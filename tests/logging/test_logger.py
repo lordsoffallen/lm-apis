@@ -76,21 +76,20 @@ class TestLLMLoggerInteractionLogging:
         config = LoggerConfig(storage_backends=[mock_backend])
         logger = LLMLogger(config)
         
-        request_data = {
-            'model': 'gpt-4',
-            'backend': 'openai',
-            'messages': [{'role': 'user', 'content': 'Hello'}],
-            'parameters': {'temperature': 0.7}
-        }
-        response_data = {
-            'response_content': 'Hi there!',
-            'finish_reason': 'stop',
-            'tokens_prompt': 10,
-            'tokens_completion': 5
-        }
-        cost_data = {'cost': 0.002}
+        log_entry = LogEntry.create(
+            model='gpt-4',
+            backend='openai',
+            messages=[{'role': 'user', 'content': 'Hello'}],
+            parameters={'temperature': 0.7},
+            response_content='Hi there!',
+            finish_reason='stop',
+            cost=0.002,
+            tokens_prompt=10,
+            tokens_completion=5,
+            retry_count=0
+        )
         
-        logger.log_interaction(request_data, response_data, cost_data)
+        logger.log_interaction(log_entry)
         
         assert len(mock_backend.saved_data) == 1
         logged_data = mock_backend.saved_data[0]
@@ -114,12 +113,13 @@ class TestLLMLoggerInteractionLogging:
         config = LoggerConfig(storage_backends=[mock_backend])
         logger = LLMLogger(config)
         
-        request_data = {'model': 'gpt-4', 'backend': 'openai'}
-        response_data = {}
-        cost_data = {}
-        error = Exception("API rate limit exceeded")
+        log_entry = LogEntry.create(
+            model='gpt-4',
+            backend='openai',
+            error="API rate limit exceeded"
+        )
         
-        logger.log_interaction(request_data, response_data, cost_data, error=error)
+        logger.log_interaction(log_entry)
         
         assert len(mock_backend.saved_data) == 1
         logged_data = mock_backend.saved_data[0]
@@ -134,17 +134,13 @@ class TestLLMLoggerInteractionLogging:
         config = LoggerConfig(storage_backends=[mock_backend])
         logger = LLMLogger(config)
         
-        start_time = time.time()
-        end_time = start_time + 1.5  # 1.5 seconds
-        
-        request_data = {'model': 'gpt-4', 'backend': 'openai'}
-        response_data = {}
-        cost_data = {}
-        
-        logger.log_interaction(
-            request_data, response_data, cost_data,
-            start_time=start_time, end_time=end_time
+        log_entry = LogEntry.create(
+            model='gpt-4',
+            backend='openai',
+            duration_ms=1500
         )
+        
+        logger.log_interaction(log_entry)
         
         assert len(mock_backend.saved_data) == 1
         logged_data = mock_backend.saved_data[0]
@@ -158,14 +154,13 @@ class TestLLMLoggerInteractionLogging:
         logger = LLMLogger(config)
         
         custom_id = "custom_req_123"
-        request_data = {'model': 'gpt-4', 'backend': 'openai'}
-        response_data = {}
-        cost_data = {}
-        
-        logger.log_interaction(
-            request_data, response_data, cost_data,
+        log_entry = LogEntry.create(
+            model='gpt-4',
+            backend='openai',
             request_id=custom_id
         )
+        
+        logger.log_interaction(log_entry)
         
         assert len(mock_backend.saved_data) == 1
         logged_data = mock_backend.saved_data[0]
@@ -178,11 +173,12 @@ class TestLLMLoggerInteractionLogging:
         config = LoggerConfig.create_disabled()
         logger = LLMLogger(config)
         
-        request_data = {'model': 'gpt-4', 'backend': 'openai'}
-        response_data = {}
-        cost_data = {}
+        log_entry = LogEntry.create(
+            model='gpt-4',
+            backend='openai'
+        )
         
-        logger.log_interaction(request_data, response_data, cost_data)
+        logger.log_interaction(log_entry)
         
         assert len(mock_backend.saved_data) == 0
     
@@ -197,21 +193,19 @@ class TestLLMLoggerInteractionLogging:
         )
         logger = LLMLogger(config)
         
-        request_data = {
-            'model': 'gpt-4',
-            'backend': 'openai',
-            'messages': [{'role': 'user', 'content': 'Hello'}],
-            'parameters': {'temperature': 0.7}
-        }
-        response_data = {
-            'response_content': 'Hi there!',
-            'finish_reason': 'stop',
-            'tokens_prompt': 10,
-            'tokens_completion': 5
-        }
-        cost_data = {'cost': 0.002}
+        log_entry = LogEntry.create(
+            model='gpt-4',
+            backend='openai',
+            messages=[{'role': 'user', 'content': 'Hello'}],
+            parameters={'temperature': 0.7},
+            response_content='Hi there!',
+            finish_reason='stop',
+            cost=0.002,
+            tokens_prompt=10,
+            tokens_completion=5
+        )
         
-        logger.log_interaction(request_data, response_data, cost_data)
+        logger.log_interaction(log_entry)
         
         assert len(mock_backend.saved_data) == 1
         logged_data = mock_backend.saved_data[0]
@@ -239,14 +233,15 @@ class TestLLMLoggerRetryLogging:
         config = LoggerConfig(storage_backends=[mock_backend])
         logger = LLMLogger(config)
         
-        exception = Exception("Connection timeout")
-        context = {
-            'model': 'gpt-4',
-            'backend': 'openai',
-            'messages': [{'role': 'user', 'content': 'Hello'}]
-        }
+        log_entry = LogEntry.create(
+            model='gpt-4',
+            backend='openai',
+            messages=[{'role': 'user', 'content': 'Hello'}],
+            error="Retry attempt 2: Connection timeout",
+            retry_count=2
+        )
         
-        logger.log_retry(2, exception, context)
+        logger.log_retry(log_entry)
         
         assert len(mock_backend.saved_data) == 1
         logged_data = mock_backend.saved_data[0]
@@ -264,11 +259,16 @@ class TestLLMLoggerRetryLogging:
         config = LoggerConfig(storage_backends=[mock_backend])
         logger = LLMLogger(config)
         
-        exception = Exception("Rate limit")
-        context = {'model': 'gpt-4', 'backend': 'openai'}
         custom_id = "original_req_123"
+        log_entry = LogEntry.create(
+            model='gpt-4',
+            backend='openai',
+            error="Retry attempt 1: Rate limit",
+            retry_count=1,
+            request_id=custom_id
+        )
         
-        logger.log_retry(1, exception, context, request_id=custom_id)
+        logger.log_retry(log_entry)
         
         assert len(mock_backend.saved_data) == 1
         logged_data = mock_backend.saved_data[0]
@@ -282,10 +282,14 @@ class TestLLMLoggerRetryLogging:
         config = LoggerConfig.create_disabled()
         logger = LLMLogger(config)
         
-        exception = Exception("Error")
-        context = {'model': 'gpt-4', 'backend': 'openai'}
+        log_entry = LogEntry.create(
+            model='gpt-4',
+            backend='openai',
+            error="Retry attempt 1: Error",
+            retry_count=1
+        )
         
-        logger.log_retry(1, exception, context)
+        logger.log_retry(log_entry)
         
         assert len(mock_backend.saved_data) == 0
     
@@ -298,15 +302,16 @@ class TestLLMLoggerRetryLogging:
         )
         logger = LLMLogger(config)
         
-        exception = Exception("Error")
-        context = {
-            'model': 'gpt-4',
-            'backend': 'openai',
-            'messages': [{'role': 'user', 'content': 'Hello'}],
-            'parameters': {'temperature': 0.7}
-        }
+        log_entry = LogEntry.create(
+            model='gpt-4',
+            backend='openai',
+            messages=[{'role': 'user', 'content': 'Hello'}],
+            parameters={'temperature': 0.7},
+            error="Retry attempt 1: Error",
+            retry_count=1
+        )
         
-        logger.log_retry(1, exception, context)
+        logger.log_retry(log_entry)
         
         assert len(mock_backend.saved_data) == 1
         logged_data = mock_backend.saved_data[0]
@@ -328,12 +333,13 @@ class TestLLMLoggerErrorHandling:
         config = LoggerConfig(storage_backends=[good_backend, bad_backend])
         logger = LLMLogger(config)
         
-        request_data = {'model': 'gpt-4', 'backend': 'openai'}
-        response_data = {}
-        cost_data = {}
+        log_entry = LogEntry.create(
+            model='gpt-4',
+            backend='openai'
+        )
         
         # Should not raise exception
-        logger.log_interaction(request_data, response_data, cost_data)
+        logger.log_interaction(log_entry)
         
         # Good backend should have received the data
         assert len(good_backend.saved_data) == 1
@@ -351,12 +357,13 @@ class TestLLMLoggerErrorHandling:
         config = LoggerConfig(storage_backends=[bad_backend1, bad_backend2])
         logger = LLMLogger(config)
         
-        request_data = {'model': 'gpt-4', 'backend': 'openai'}
-        response_data = {}
-        cost_data = {}
+        log_entry = LogEntry.create(
+            model='gpt-4',
+            backend='openai'
+        )
         
         # Should not raise exception even when all backends fail
-        logger.log_interaction(request_data, response_data, cost_data)
+        logger.log_interaction(log_entry)
         
         # Both backends should be tracked as failed
         assert bad_backend1 in logger._failed_backends
@@ -369,19 +376,20 @@ class TestLLMLoggerErrorHandling:
         config = LoggerConfig(storage_backends=[backend])
         logger = LLMLogger(config)
         
-        request_data = {'model': 'gpt-4', 'backend': 'openai'}
-        response_data = {}
-        cost_data = {}
+        log_entry = LogEntry.create(
+            model='gpt-4',
+            backend='openai'
+        )
         
         # First call should fail
-        logger.log_interaction(request_data, response_data, cost_data)
+        logger.log_interaction(log_entry)
         assert backend in logger._failed_backends
         
         # Fix the backend
         backend.should_fail = False
         
         # Second call should succeed and remove from failed tracking
-        logger.log_interaction(request_data, response_data, cost_data)
+        logger.log_interaction(log_entry)
         assert backend not in logger._failed_backends
         assert len(backend.saved_data) == 1
     
@@ -394,34 +402,36 @@ class TestLLMLoggerErrorHandling:
         config = LoggerConfig(storage_backends=[backend])
         logger = LLMLogger(config)
         
-        request_data = {'model': 'gpt-4', 'backend': 'openai'}
-        response_data = {}
-        cost_data = {}
+        log_entry = LogEntry.create(
+            model='gpt-4',
+            backend='openai'
+        )
         
         # Should not raise exception
-        logger.log_interaction(request_data, response_data, cost_data)
+        logger.log_interaction(log_entry)
         
         # Backend should be called
         assert backend.save.called
     
-    @patch('lmapis.logging.logger.LogEntry.create')
-    def test_log_entry_creation_failure(self, mock_create):
-        """Test handling of LogEntry creation failures."""
-        mock_create.side_effect = Exception("LogEntry creation failed")
-        
+    def test_log_entry_filtering_failure(self):
+        """Test handling of LogEntry filtering failures."""
         mock_backend = MockStorageBackend()
         config = LoggerConfig(storage_backends=[mock_backend])
         logger = LLMLogger(config)
         
-        request_data = {'model': 'gpt-4', 'backend': 'openai'}
-        response_data = {}
-        cost_data = {}
+        # Create a log entry that will cause filtering to fail
+        log_entry = LogEntry.create(
+            model='gpt-4',
+            backend='openai'
+        )
         
-        # Should not raise exception
-        logger.log_interaction(request_data, response_data, cost_data)
-        
-        # No data should be saved due to creation failure
-        assert len(mock_backend.saved_data) == 0
+        # Mock the _apply_data_filtering method to raise an exception
+        with patch.object(logger, '_apply_data_filtering', side_effect=Exception("Filtering failed")):
+            # Should not raise exception
+            logger.log_interaction(log_entry)
+            
+            # No data should be saved due to filtering failure
+            assert len(mock_backend.saved_data) == 0
 
 
 class TestLLMLoggerBackendManagement:
@@ -470,8 +480,13 @@ class TestLLMLoggerBackendManagement:
         config = LoggerConfig(storage_backends=[good_backend, bad_backend])
         logger = LLMLogger(config)
         
+        log_entry = LogEntry.create(
+            model='gpt-4',
+            backend='openai'
+        )
+        
         # Trigger failure
-        logger.log_interaction({'model': 'gpt-4', 'backend': 'openai'}, {}, {})
+        logger.log_interaction(log_entry)
         
         failed_backends = logger.get_failed_backends()
         assert bad_backend in failed_backends
@@ -483,8 +498,13 @@ class TestLLMLoggerBackendManagement:
         config = LoggerConfig(storage_backends=[bad_backend])
         logger = LLMLogger(config)
         
+        log_entry = LogEntry.create(
+            model='gpt-4',
+            backend='openai'
+        )
+        
         # Trigger failure
-        logger.log_interaction({'model': 'gpt-4', 'backend': 'openai'}, {}, {})
+        logger.log_interaction(log_entry)
         assert len(logger.get_failed_backends()) == 1
         
         # Reset tracking
@@ -502,7 +522,8 @@ class TestLLMLoggerContextManager:
         
         with LLMLogger(config) as logger:
             assert logger.is_enabled() == True
-            logger.log_interaction({'model': 'gpt-4', 'backend': 'openai'}, {}, {})
+            log_entry = LogEntry.create(model='gpt-4', backend='openai')
+            logger.log_interaction(log_entry)
         
         # Logger should be closed after context exit
         assert logger._closed == True
@@ -515,7 +536,8 @@ class TestLLMLoggerContextManager:
         
         try:
             with LLMLogger(config) as logger:
-                logger.log_interaction({'model': 'gpt-4', 'backend': 'openai'}, {}, {})
+                log_entry = LogEntry.create(model='gpt-4', backend='openai')
+                logger.log_interaction(log_entry)
                 raise Exception("Test exception")
         except Exception:
             pass
@@ -581,15 +603,13 @@ class TestLLMLoggerSanitization:
         config = LoggerConfig(storage_backends=[mock_backend], sanitize_messages=True)
         logger = LLMLogger(config)
         
-        request_data = {
-            'model': 'gpt-4',
-            'backend': 'openai',
-            'messages': [{'role': 'user', 'content': 'My email is test@example.com'}]
-        }
-        response_data = {}
-        cost_data = {}
+        log_entry = LogEntry.create(
+            model='gpt-4',
+            backend='openai',
+            messages=[{'role': 'user', 'content': 'My email is test@example.com'}]
+        )
         
-        logger.log_interaction(request_data, response_data, cost_data)
+        logger.log_interaction(log_entry)
         
         assert len(mock_backend.saved_data) == 1
         logged_data = mock_backend.saved_data[0]
@@ -604,15 +624,13 @@ class TestLLMLoggerSanitization:
         config = LoggerConfig(storage_backends=[mock_backend], sanitize_messages=False)
         logger = LLMLogger(config)
         
-        request_data = {
-            'model': 'gpt-4',
-            'backend': 'openai',
-            'messages': [{'role': 'user', 'content': 'My email is test@example.com'}]
-        }
-        response_data = {}
-        cost_data = {}
+        log_entry = LogEntry.create(
+            model='gpt-4',
+            backend='openai',
+            messages=[{'role': 'user', 'content': 'My email is test@example.com'}]
+        )
         
-        logger.log_interaction(request_data, response_data, cost_data)
+        logger.log_interaction(log_entry)
         
         assert len(mock_backend.saved_data) == 1
         logged_data = mock_backend.saved_data[0]

@@ -65,126 +65,92 @@ class LLMLogger:
         """
         return not self._closed and self.config.is_enabled()
     
-    def log_interaction(
-        self,
-        request_data: Dict[str, Any],
-        response_data: Dict[str, Any],
-        cost_data: Dict[str, Any],
-        error: Optional[Exception] = None,
-        start_time: Optional[float] = None,
-        end_time: Optional[float] = None,
-        request_id: Optional[str] = None
-    ) -> None:
+    def log_interaction(self, log_entry: LogEntry) -> None:
         """
-        Log a complete LLM interaction including request, response, and cost data.
+        Log a complete LLM interaction using a LogEntry object.
         
-        This method captures all relevant information from an LLM interaction
-        in a single log entry. It handles data filtering based on configuration
-        and ensures that logging errors don't interrupt LLM operations.
+        This method logs a complete LLM interaction with data filtering based on
+        configuration and ensures that logging errors don't interrupt LLM operations.
         
         Args:
-            request_data: Dictionary containing request information:
-                - model: str - The LLM model name
-                - backend: str - The backend provider (e.g., 'openai', 'anthropic')
-                - messages: List[Dict] - List of message dictionaries
-                - parameters: Dict - Request parameters (temperature, max_tokens, etc.)
-            response_data: Dictionary containing response information:
-                - response_content: str - The generated response content
-                - finish_reason: str - Why the model stopped generating
-                - tokens_prompt: int - Number of prompt tokens used
-                - tokens_completion: int - Number of completion tokens generated
-            cost_data: Dictionary containing cost information:
-                - cost: float - Total cost of the request in dollars
-            error: Optional exception that occurred during the request
-            start_time: Optional start timestamp (time.time() format)
-            end_time: Optional end timestamp (time.time() format)
-            request_id: Optional unique identifier for the request
+            log_entry: LogEntry object containing all interaction data
         """
         if not self.is_enabled():
             return
         
         try:
-            # Calculate duration if timestamps provided
-            duration_ms = None
-            if start_time is not None and end_time is not None:
-                duration_ms = int((end_time - start_time) * 1000)
-            
-            # Create log entry with data filtering based on configuration
-            log_entry = LogEntry.create(
-                model=request_data.get('model', 'unknown'),
-                backend=request_data.get('backend', 'unknown'),
-                messages=request_data.get('messages') if self.config.should_include_request_data() else None,
-                parameters=request_data.get('parameters') if self.config.should_include_request_data() else None,
-                response_content=response_data.get('response_content') if self.config.should_include_response_data() else None,
-                finish_reason=response_data.get('finish_reason') if self.config.should_include_response_data() else None,
-                cost=cost_data.get('cost') if self.config.should_include_cost_data() else None,
-                tokens_prompt=response_data.get('tokens_prompt') if self.config.should_include_cost_data() else None,
-                tokens_completion=response_data.get('tokens_completion') if self.config.should_include_cost_data() else None,
-                duration_ms=duration_ms,
-                error=str(error) if error else None,
-                retry_count=0,  # This is for initial requests, retries use log_retry
-                request_id=request_id,
-            )
+            # Apply data filtering based on configuration
+            filtered_entry = self._apply_data_filtering(log_entry)
             
             # Apply sanitization if configured
             if self.config.should_sanitize_messages():
-                log_entry = log_entry.sanitize()
+                filtered_entry = filtered_entry.sanitize()
             
             # Save to all configured storage backends
-            self._save_to_backends(log_entry.to_dict())
+            self._save_to_backends(filtered_entry.to_dict())
             
         except Exception as e:
             # Log internal error but don't interrupt LLM operations
             self._internal_logger.warning(f"Failed to log LLM interaction: {e}")
     
-    def log_retry(
-        self,
-        attempt: int,
-        exception: Exception,
-        context: Dict[str, Any],
-        request_id: Optional[str] = None
-    ) -> None:
+    def log_retry(self, log_entry: LogEntry) -> None:
         """
-        Log a retry attempt with context information.
+        Log a retry attempt using a LogEntry object.
         
-        This method logs information about retry attempts, including the attempt
-        number, the exception that triggered the retry, and any relevant context.
+        This method logs information about retry attempts with data filtering
+        based on configuration and ensures that logging errors don't interrupt
+        retry logic.
         
         Args:
-            attempt: The retry attempt number (1-based)
-            exception: The exception that triggered the retry
-            context: Dictionary containing context information:
-                - model: str - The LLM model name
-                - backend: str - The backend provider
-                - messages: List[Dict] - Original messages (optional)
-                - parameters: Dict - Request parameters (optional)
-            request_id: Optional unique identifier linking to the original request
+            log_entry: LogEntry object containing retry attempt data
         """
         if not self.is_enabled():
             return
         
         try:
-            # Create log entry for retry attempt
-            log_entry = LogEntry.create(
-                model=context.get('model', 'unknown'),
-                backend=context.get('backend', 'unknown'),
-                messages=context.get('messages') if self.config.should_include_request_data() else None,
-                parameters=context.get('parameters') if self.config.should_include_request_data() else None,
-                error=f"Retry attempt {attempt}: {str(exception)}",
-                retry_count=attempt,
-                request_id=request_id or f"retry_{uuid.uuid4().hex[:8]}",
-            )
+            # Apply data filtering based on configuration
+            filtered_entry = self._apply_data_filtering(log_entry)
             
             # Apply sanitization if configured
             if self.config.should_sanitize_messages():
-                log_entry = log_entry.sanitize()
+                filtered_entry = filtered_entry.sanitize()
             
             # Save to all configured storage backends
-            self._save_to_backends(log_entry.to_dict())
+            self._save_to_backends(filtered_entry.to_dict())
             
         except Exception as e:
             # Log internal error but don't interrupt retry logic
             self._internal_logger.warning(f"Failed to log retry attempt: {e}")
+    
+    def _apply_data_filtering(self, log_entry: LogEntry) -> LogEntry:
+        """
+        Apply data filtering based on configuration settings.
+        
+        This method creates a new LogEntry with fields filtered out based on
+        the logger configuration (e.g., exclude request data, response data, etc.).
+        
+        Args:
+            log_entry: Original LogEntry to filter
+            
+        Returns:
+            New LogEntry with filtered data
+        """
+        return LogEntry.create(
+            model=log_entry.model,
+            backend=log_entry.backend,
+            messages=log_entry.messages if self.config.should_include_request_data() else None,
+            parameters=log_entry.parameters if self.config.should_include_request_data() else None,
+            response_content=log_entry.response_content if self.config.should_include_response_data() else None,
+            finish_reason=log_entry.finish_reason if self.config.should_include_response_data() else None,
+            cost=log_entry.cost if self.config.should_include_cost_data() else None,
+            tokens_prompt=log_entry.tokens_prompt if self.config.should_include_cost_data() else None,
+            tokens_completion=log_entry.tokens_completion if self.config.should_include_cost_data() else None,
+            duration_ms=log_entry.duration_ms,
+            error=log_entry.error,
+            retry_count=log_entry.retry_count,
+            request_id=log_entry.request_id,
+            timestamp=log_entry.timestamp,
+        )
     
     def _save_to_backends(self, log_data: Dict[str, Any]) -> None:
         """
