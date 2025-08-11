@@ -4,6 +4,7 @@ from .utils.retry import should_retry_exception
 from textwrap import dedent
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception
 from typing import Any, Optional
+from dataclasses import dataclass
 
 import time
 import uuid
@@ -11,7 +12,6 @@ import importlib
 
 
 logger = get_logger(__name__)
-
 
 
 def get_backend(name: str, async_api: bool = False):
@@ -34,6 +34,21 @@ def get_backend(name: str, async_api: bool = False):
     module = importlib.import_module(module_path)
 
     return module.AsyncLMApi if async_api else module.LMApi
+
+
+@dataclass
+class Prompt:
+    user: str
+    system: str = None
+
+
+def parse_finish_reason(output) -> str:
+    try:
+        finish_reason = output.choices[0].finish_reason
+    except AttributeError:
+        finish_reason = output.stop_reason
+    
+    return finish_reason
 
 
 class LLM:
@@ -135,7 +150,11 @@ class LLM:
         except Exception as log_error:
             logger.warning(f"Failed to log LLM interaction: {log_error}")
 
-    def _get_messages(self, msgs: Messages, prefill_response: Assistant = None) -> Messages:
+    def _get_messages(self, msgs: Messages, prefill_response: str | Assistant = None) -> Messages:
+        if prefill_response is not None:
+            prefill_response = Assistant(prefill_response) \
+                if isinstance(prefill_response, str) else prefill_response
+
         # Prepare messages for the API call
         if "claude" in self.model:
             # Claude supports assistant prefill response
@@ -161,7 +180,7 @@ class LLM:
         ),
         reraise=True
     )
-    def __llm_call(self, messages: Messages, **kwargs) -> ChatCompletion:
+    def chat_completion(self, messages: Messages, **kwargs) -> ChatCompletion:
         return self.llm.client.chat.completions.create(
             model=self.model,
             messages=messages.get(),
@@ -169,19 +188,16 @@ class LLM:
             **kwargs
         )
 
-    def _call_model(
-        self, msgs: Messages, prefill_response: Assistant = None, **kwargs
-    ) -> ChatCompletion:
+    def _call_model(self, messages: Messages, **kwargs) -> ChatCompletion:
         # Generate unique request ID for this interaction
         request_id = f"req_{uuid.uuid4().hex[:8]}"
         start_time = time.time()
-        messages = self._get_messages(msgs, prefill_response)
         
         response = None
         error = None
         
         try:
-            response = self.__llm_call(messages, **kwargs)
+            response = self.chat_completion(messages, **kwargs)
             end_time = time.time()
             
             self._log_interaction(
@@ -216,7 +232,7 @@ class LLM:
     def __call__(
         self,
         *,
-        prompts: "Prompts" = None,
+        prompt: Prompt = None,
         messages: Messages = None,
         assistant_prefill: str | Assistant = None,
         tools: list[dict] = None,
@@ -226,24 +242,17 @@ class LLM:
         cost = 0
 
         if messages is None:
-            query = prompts.user
-            system_prompt = prompts.system
+            user = prompt.user
+            system = prompt.system
 
-            if system_prompt:
-                system_prompt = dedent(system_prompt)
+            if system:
+                system = dedent(system)
 
-            messages = Messages() >> System(system_prompt) >> User(query)
+            messages = Messages() >> System(system) >> User(user)
 
-        if assistant_prefill is not None:
-            assistant_prefill = Assistant(assistant_prefill) \
-                if isinstance(assistant_prefill, str) else assistant_prefill
-
-        output = self._call_model(messages, assistant_prefill, tools=tools)
-
-        try:
-            finish_reason = output.choices[0].finish_reason
-        except AttributeError:
-            finish_reason = output.stop_reason
+        messages = self._get_messages(messages, assistant_prefill)
+        output = self._call_model(messages, tools=tools)
+        finish_reason = parse_finish_reason(output)
 
         try:
             assistant = Assistant.from_model_response(output)
@@ -267,10 +276,7 @@ class LLM:
             output = self._call_model(messages, assistant, tools=tools)
             assistant.content += Assistant.from_model_response(output).content
             # Update finish reason
-            try:
-                finish_reason = output.choices[0].finish_reason
-            except AttributeError:
-                finish_reason = output.stop_reason
+            finish_reason = parse_finish_reason(output)
             cost += self.compute_cost(output)
 
         match finish_reason:

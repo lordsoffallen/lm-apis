@@ -397,9 +397,11 @@ class TestLLMLoggingIntegration:
             # Create test messages with prefill
             messages = Messages() >> System("You are helpful") >> User("Hello")
             prefill = Assistant("I'll help you")
+
+            messages = llm._get_messages(messages, prefill)
             
             # Call the model with prefill
-            result = llm._call_model(messages, prefill)
+            result = llm._call_model(messages)
             
             # Verify the API call was made
             assert mock_client.chat.completions.create.called
