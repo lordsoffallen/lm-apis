@@ -8,9 +8,9 @@ to ensure the LoggerConfig class behaves correctly in all scenarios.
 import pytest
 from unittest.mock import Mock
 
-from src.lmapis.logging.config import LoggerConfig
-from src.lmapis.logging.storage import StorageBackend
-from src.lmapis.logging.console import Console
+from lmapis.logging.config import LoggerConfig
+from lmapis.logging.storage import StorageBackend
+from lmapis.logging.console import Console
 
 
 class MockStorageBackend(StorageBackend):

@@ -11,8 +11,8 @@ from unittest.mock import Mock, patch
 import pytest
 import structlog
 
-from src.lmapis.logging.console import Console
-from src.lmapis.logging.log_entry import LogEntry
+from lmapis.logging.console import Console
+from lmapis.logging.log_entry import LogEntry
 
 
 class TestConsoleInitialization:
