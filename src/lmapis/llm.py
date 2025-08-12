@@ -229,6 +229,37 @@ class LLM:
             # Re-raise the exception to maintain existing behavior
             raise
 
+    def _extract_thinking_content(
+        self, response: ChatCompletion | Any
+    ) -> tuple[ChatCompletion | Any, str | None]:
+        """
+        Extract content between <think> tags if present and store it in reasoning_content.
+
+        Args:
+            response: The response object from the provider
+
+        Returns:
+            Modified response object
+        """
+        reasoning_content = None
+
+        if hasattr(response, "choices") and response.choices:
+            message = response.choices[0].message
+            if hasattr(message, "content") and message.content:
+                content = message.content.strip()
+                if content.startswith("<think>") and "</think>" in content:
+                    # Extract content between think tags
+                    start_idx = len("<think>")
+                    end_idx = content.find("</think>")
+                    reasoning_content = content[start_idx:end_idx].strip()
+
+                    # Remove the think tags from the original content
+                    message.content = content[end_idx + len("</think>") :].strip()
+
+        return response, reasoning_content
+    
+    
+
     def __call__(
         self,
         *,
@@ -252,10 +283,11 @@ class LLM:
 
         messages = self._get_messages(messages, assistant_prefill)
         output = self._call_model(messages, tools=tools)
+        output, reasoning_content = self._extract_thinking_content(output)
         finish_reason = parse_finish_reason(output)
 
         try:
-            assistant = Assistant.from_model_response(output)
+            assistant = Assistant.from_model_response(output, reasoning_content)
         except BaseException as e:
             logger.error(
                 f"Unable to parse assistant response, something is off. "
@@ -274,7 +306,8 @@ class LLM:
             )
 
             output = self._call_model(messages, assistant, tools=tools)
-            assistant.content += Assistant.from_model_response(output).content
+            output, reasoning_content = self._extract_thinking_content(output)
+            assistant.content += Assistant.from_model_response(output, reasoning_content).content
             # Update finish reason
             finish_reason = parse_finish_reason(output)
             cost += self.compute_cost(output)
@@ -288,3 +321,5 @@ class LLM:
                 raise ValueError("Model is finished with another reason.")
 
         return assistant
+
+

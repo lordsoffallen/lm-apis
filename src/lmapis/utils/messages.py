@@ -23,6 +23,20 @@ class BaseMessage:
     role: str
     content: str | list[TextContent | ImageContent | RefusalContent] | None
 
+    def __getattribute__(self, name):
+        # Check if it's a dataclass field and marked as deprecated
+        try:
+            f = type(self).__dataclass_fields__.get(name)
+            if f and f.metadata.get("deprecated"):
+                warnings.warn(
+                    f"Field '{name}' is deprecated and will be removed in a future version.",
+                    DeprecationWarning,
+                    stacklevel=2
+                )
+        except AttributeError:
+            pass
+        return super().__getattribute__(name)
+
 
 @dataclass
 class System(BaseMessage):
@@ -38,7 +52,7 @@ class User(BaseMessage):
 class Assistant(BaseMessage):
     role: str = field(default="assistant", init=False)
     reasoning_content: str = None
-    function_call: Any = None   # deprecated
+    function_call: Any = field(default=default, metadata={"deprecated": True})   # deprecated
     tool_calls: Any | list[ChatCompletionMessageToolCall] = None
     refusal: str = None
 
@@ -86,13 +100,13 @@ class Function(BaseMessage):
 
 class Messages:
     def __init__(self):
-        self.messages: list[dict[str, Any]] = []
+        self.messages: list[BaseMessage] = []
 
     def add_message(self, message: BaseMessage = None) -> "Messages":
         new_copy = deepcopy(self)  # Create a copy first
         if message is not None:
             if (message.content is not None) and (message.content != ""):
-                new_copy.messages.append(asdict(message))  # Modify the copy
+                new_copy.messages.append(message)  # Store raw message object
         return new_copy  # Return the modified copy
 
     def __rshift__(self, other: BaseMessage = None) -> "Messages":
@@ -101,7 +115,10 @@ class Messages:
 
     def __str__(self) -> str:
         """String representation of the messages"""
-        return "\n".join(f"{msg['role']}: {msg['content']}" for msg in self.messages)
+        return "\n".join(f"{msg.role}: {msg.content}" for msg in self.messages)
 
-    def get(self):
-        return self.messages
+    def get(self, as_dict: bool = True):
+        """Get messages as dictionaries (default) or raw BaseMessage objects"""
+        if as_dict:
+            return [asdict(msg) for msg in self.messages]
+        return deepcopy(self.messages)
