@@ -37,12 +37,13 @@ class User(BaseMessage):
 @dataclass
 class Assistant(BaseMessage):
     role: str = field(default="assistant", init=False)
+    reasoning_content: str = None
     function_call: Any = None   # deprecated
     tool_calls: Any | list[ChatCompletionMessageToolCall] = None
     refusal: str = None
 
     @classmethod
-    def from_model_response(cls, output: ChatCompletion) -> "Assistant":
+    def from_model_response(cls, output: ChatCompletion, reasoning_content: str = None) -> "Assistant":
         try:
             response = output.choices[0].message.to_dict()
         except AttributeError as e:
@@ -61,7 +62,7 @@ class Assistant(BaseMessage):
             tool_calls = [ChatCompletionMessageToolCall(**tc) for tc in tool_calls]
             response["tool_calls"] = tool_calls
 
-        return cls(**response)
+        return cls(**response, reasoning_content=reasoning_content)
 
     def asdict(self) -> dict:
         d = asdict(self)
