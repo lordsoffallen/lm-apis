@@ -257,8 +257,62 @@ class LLM:
                     message.content = content[end_idx + len("</think>") :].strip()
 
         return response, reasoning_content
-    
-    
+
+    # TODO delete or include this
+    # def _tool_runner(
+    #     self,
+    #     *,
+    #     messages: Messages = None,
+    #     assistant_prefill: str | Assistant = None,
+    #     tools: list[dict] = None,
+    #     max_turns: int = 1,
+    #     **kwargs,
+    # ):
+    #     """
+    #     Handle tool execution loop for max_turns iterations.
+    #
+    #     Args:
+    #         provider: The provider instance to use for completions
+    #         model_name: Name of the model to use
+    #         messages: List of conversation messages
+    #         tools: Tools instance or list of callable tools
+    #         max_turns: Maximum number of tool execution turns
+    #         **kwargs: Additional arguments to pass to the provider
+    #
+    #     Returns:
+    #         The final response from the model with intermediate responses and messages
+    #     """
+    #
+    #     turns = 0
+    #     messages = self._get_messages(messages, assistant_prefill)
+    #     all_messages = messages.get(as_dict=False)
+    #
+    #     while turns < max_turns:
+    #         # Make the API call
+    #         assistant = self(messages=messages, tools=tools, **kwargs)
+    #
+    #         if not assistant.tool_calls:
+    #             return assistant
+    #
+    #
+    #
+    #         # Execute tools and get results
+    #         results, tool_messages = tools_instance.execute_tool(tool_calls)
+    #
+    #         # Add tool messages to intermediate messages
+    #         intermediate_messages.extend(tool_messages)
+    #
+    #         # Add the assistant's response and tool results to messages
+    #         messages.extend([response.choices[0].message, *tool_messages])
+    #
+    #         turns += 1
+    #
+    #     # Set the intermediate data in the final response
+    #     response.intermediate_responses = intermediate_responses[
+    #         :-1
+    #     ]  # Exclude final response
+    #     response.choices[0].intermediate_messages = intermediate_messages
+    #     return response
 
     def __call__(
         self,
