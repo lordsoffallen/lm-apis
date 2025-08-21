@@ -86,7 +86,11 @@ class Assistant(BaseMessage):
             tool_calls = [ChatCompletionMessageToolCall(**tc) for tc in tool_calls]
             response["tool_calls"] = tool_calls
 
-        return cls(**response)
+        return cls(
+            content=response["content"],
+            tool_calls=response.get("tool_calls"),
+            refusal=response.get("refusal")
+        )
 
     def asdict(self) -> dict:
         d = asdict(self)
