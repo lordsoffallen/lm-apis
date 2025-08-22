@@ -5,6 +5,8 @@ from copy import deepcopy
 
 from .images import ImageContent
 
+import warnings
+
 
 @dataclass
 class TextContent:
@@ -52,21 +54,18 @@ class User(BaseMessage):
 class Assistant(BaseMessage):
     role: str = field(default="assistant", init=False)
     reasoning_content: str = None
-    function_call: Any = field(default=default, metadata={"deprecated": True})   # deprecated
+    function_call: Any = field(default=None, metadata={"deprecated": True})   # deprecated
     tool_calls: Any | list[ChatCompletionMessageToolCall] = None
     refusal: str = None
 
     @classmethod
-    def from_model_response(cls, output: ChatCompletion, reasoning_content: str = None) -> "Assistant":
+    def from_model_response(
+        cls, output: ChatCompletion, reasoning_content: str = None
+    ) -> "Assistant":
         try:
             response = output.choices[0].message.to_dict()
-        except AttributeError as e:
+        except AttributeError:
             response = output.choices[0].message.model_dump(mode="python")
-
-        response.pop("role")  # Remove role as it's not required
-
-        if "prefix" in response.keys():
-            response.pop("prefix")
 
         tool_calls = response.get("tool_calls")
         if tool_calls is not None:
@@ -76,7 +75,12 @@ class Assistant(BaseMessage):
             tool_calls = [ChatCompletionMessageToolCall(**tc) for tc in tool_calls]
             response["tool_calls"] = tool_calls
 
-        return cls(**response, reasoning_content=reasoning_content)
+        return cls(
+            content=response.get("content"),
+            refusal=response.get("refusal"),
+            tool_calls=response.get("tool_calls"),
+            reasoning_content=reasoning_content
+        )
 
     def asdict(self) -> dict:
         d = asdict(self)
@@ -84,6 +88,7 @@ class Assistant(BaseMessage):
         if "tool_calls" in d.keys():
             # Parse pydantic as dict here
             d["tool_calls"] = [i.model_dump(mode="python") for i in d["tool_calls"]]
+        return d
 
 
 @dataclass
