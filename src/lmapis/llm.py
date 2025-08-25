@@ -1,6 +1,7 @@
 from .utils.messages import Assistant, Messages, System, User, ChatCompletion
 from .logging import get_logger,LLMLogger, LogEntry
 from .utils.retry import should_retry_exception
+from .utils.tools import Tools
 from textwrap import dedent
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception
 from typing import Any, Optional
@@ -169,6 +170,25 @@ class LLM:
                 )
         return msgs
 
+    def prepare_messages(
+        self,
+        *,
+        prompt: Prompt = None,
+        messages: Messages = None,
+        assistant_prefill: str | Assistant = None,
+    ) -> Messages:
+        if messages is None:
+            user = prompt.user
+            system = prompt.system
+
+            if system:
+                system = dedent(system)
+
+            messages = Messages() >> System(system) >> User(user)
+
+        messages = self._get_messages(messages, assistant_prefill)
+        return messages
+
     @retry(
         wait=wait_exponential(multiplier=1, min=4, max=10),
         stop=stop_after_attempt(10),
@@ -267,16 +287,9 @@ class LLM:
         cost = 0
         extra_kwargs = dict(tools=tools) if tools is not None else {}
 
-        if messages is None:
-            user = prompt.user
-            system = prompt.system
-
-            if system:
-                system = dedent(system)
-
-            messages = Messages() >> System(system) >> User(user)
-
-        messages = self._get_messages(messages, assistant_prefill)
+        messages = self.prepare_messages(
+            prompt=prompt, messages=messages, assistant_prefill=assistant_prefill
+        )
         output = self.chat_completion(messages, **extra_kwargs)
         output, reasoning_content = self._extract_thinking_content(output)
         finish_reason = parse_finish_reason(output)
@@ -317,4 +330,66 @@ class LLM:
 
         return assistant
 
+    def __call__(
+        self,
+        *,
+        prompt: Prompt = None,
+        messages: Messages = None,
+        assistant_prefill: str | Assistant = None,
+        tools: list[dict] = None,
+        max_turns: int = 0,
+        **kwargs,
+    ) -> Assistant:
+        """
+        Call an LLM endpoint.
 
+        Args:
+            prompt: Prompt that contains user and system text
+            messages: Prompts in the defined `Messages` class
+            assistant_prefill: Only for Claude models, response completion text
+            tools: Specific tools for model to use.
+            max_turns: If more than 1 then call will auto tool calling that many times.
+
+        Returns:
+            Assistant response
+        """
+
+        if max_turns == 0:
+            assistant = self._call_model(
+                prompt=prompt,
+                messages=messages,
+                assistant_prefill=assistant_prefill,
+                tools=tools,
+            )
+            return assistant
+        else:
+            raise NotImplementedError
+            # turns = 0
+            # messages = self.prepare_messages(
+            #     prompt=prompt, messages=messages, assistant_prefill=assistant_prefill
+            # )
+            # all_messages = messages.get(as_dict=False)
+            #
+            # while turns < max_turns:
+            #     assistant = self._call_model(messages=messages, tools=tools)
+            #
+            #     if not assistant.tool_calls:
+            #         return assistant
+
+                # TODO Make the tool call and return the response here
+            #     results, tool_messages = tools_instance.execute_tool(tool_calls)
+            #
+            #     # Add tool messages to intermediate messages
+            #     intermediate_messages.extend(tool_messages)
+            #
+            #     # Add the assistant's response and tool results to messages
+            #     messages.extend([response.choices[0].message, *tool_messages])
+            #
+            #     turns += 1
+            #
+            #     # Set the intermediate data in the final response
+            #     response.intermediate_responses = intermediate_responses[
+            #         :-1
+            #     ]  # Exclude final response
+            #     response.choices[0].intermediate_messages = intermediate_messages
+            #     return response
