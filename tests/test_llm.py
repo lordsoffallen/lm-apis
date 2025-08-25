@@ -8,11 +8,12 @@ functionality.
 
 import pytest
 import time
-from unittest.mock import Mock, patch, MagicMock
+import os
+from unittest.mock import Mock, patch
 from typing import Dict, Any, List
 
-from lmapis.llm import LLM
-from lmapis.logging.logger import LLMLogger
+from lmapis.llm import LLM, Prompt, parse_finish_reason, get_backend
+from lmapis.logging import LLMLogger, LogEntry
 from lmapis.logging.config import LoggerConfig
 from lmapis.logging.storage import StorageBackend
 from lmapis.utils.messages import Messages, System, User, Assistant
@@ -512,3 +513,383 @@ class TestLLMLoggingIntegration:
             
             # Verify logging occurred for all calls
             assert mock_storage_backend.save_calls == 10
+
+
+class TestLLMUnit:
+    """Unit tests for LLM class using mocks."""
+
+    @classmethod
+    def setup_class(cls):
+        os.environ["OPENAI_API_KEY"] = "TEST KEY"
+        os.environ["ANTHROPIC_API_KEY"] = "TEST KEY"
+
+    @classmethod
+    def teardown_class(cls):
+        del os.environ["OPENAI_API_KEY"]
+        del os.environ["ANTHROPIC_API_KEY"]
+
+    def test_get_backend_valid_names(self):
+        """Test get_backend function with valid provider names."""
+        providers = [
+            "openai", "anthropic", "google", "google-genai",
+            "together", "together-ai", "togetherai", "fireworks", "mistral"
+        ]
+
+        for provider in providers:
+            backend = get_backend(provider)
+            assert backend is not None
+
+    def test_get_backend_invalid_name(self):
+        """Test get_backend function with invalid provider name."""
+        with pytest.raises(ValueError, match="Unexpected value invalid_provider"):
+            get_backend("invalid_provider")
+
+    def test_llm_initialization_defaults(self):
+        """Test LLM initialization with default values."""
+        llm = LLM(
+            backend="openai",
+            model="gpt-4o-mini",
+            cost={"input": 0.15, "output": 0.60}
+        )
+
+        assert llm.backend == "openai"
+        assert llm.model == "gpt-4o-mini"
+        assert llm.credentials is None
+        assert llm.auto_cost_tracking is True
+        assert llm.model_params == {}
+        assert llm.backend_kwargs == {}
+        assert llm.llm_logger is None
+
+    def test_llm_initialization_full(self):
+        """Test LLM initialization with all parameters."""
+        mock_logger = Mock(spec=LLMLogger)
+        model_params = {"temperature": 0.7, "max_tokens": 100}
+        backend_kwargs = {"timeout": 30}
+
+        llm = LLM(
+            backend="anthropic",
+            model="claude-3-haiku-20240307",
+            cost={"input": 0.25, "output": 1.25},
+            credentials="test-key",
+            model_params=model_params,
+            backend_kwargs=backend_kwargs,
+            logger=mock_logger
+        )
+
+        assert llm.backend == "anthropic"
+        assert llm.model == "claude-3-haiku-20240307"
+        assert llm.credentials == "test-key"
+        assert llm.model_params == model_params
+        assert llm.backend_kwargs == backend_kwargs
+        assert llm.llm_logger == mock_logger
+
+    def test_compute_cost(self):
+        """Test cost computation."""
+        llm = LLM(
+            backend="openai",
+            model="gpt-4o-mini",
+            cost={"input": 0.15, "output": 0.60}  # per 1M tokens
+        )
+
+        # Mock response with usage
+        mock_response = Mock()
+        mock_response.usage.prompt_tokens = 1000  # 1k tokens
+        mock_response.usage.completion_tokens = 500  # 0.5k tokens
+
+        cost = llm.compute_cost(mock_response)
+
+        # Expected: (1000 * 0.15 / 1M) + (500 * 0.60 / 1M) = 0.00015 + 0.0003 = 0.00045
+        expected_cost = (1000 * 0.15 / 1_000_000) + (500 * 0.60 / 1_000_000)
+        assert cost == expected_cost
+
+    def test_parse_finish_reason_choices(self):
+        """Test parse_finish_reason with choices attribute."""
+        mock_output = Mock()
+        mock_output.choices = [Mock()]
+        mock_output.choices[0].finish_reason = "stop"
+
+        reason = parse_finish_reason(mock_output)
+        assert reason == "stop"
+
+    def test_parse_finish_reason_stop_reason(self):
+        """Test parse_finish_reason with stop_reason attribute."""
+        mock_output = Mock()
+        # Remove choices attribute to trigger AttributeError
+        del mock_output.choices
+        mock_output.stop_reason = "end_turn"
+
+        reason = parse_finish_reason(mock_output)
+        assert reason == "end_turn"
+
+    def test_prompt_caching_enabled_true(self):
+        """Test prompt caching detection when enabled."""
+        llm = LLM(
+            backend="anthropic",
+            model="claude-3-haiku-20240307",
+            cost={"input": 0.25, "output": 1.25},
+            model_params={
+                "extra_headers": {"anthropic-beta": "prompt-caching-2024-07-31"}
+            }
+        )
+
+        assert llm.is_prompt_caching_enabled is True
+
+    def test_prompt_caching_enabled_false(self):
+        """Test prompt caching detection when disabled."""
+        llm = LLM(
+            backend="anthropic",
+            model="claude-3-haiku-20240307",
+            cost={"input": 0.25, "output": 1.25}
+        )
+
+        assert llm.is_prompt_caching_enabled is False
+
+    def test_prompt_caching_different_header(self):
+        """Test prompt caching detection with different header value."""
+        llm = LLM(
+            backend="anthropic",
+            model="claude-3-haiku-20240307",
+            cost={"input": 0.25, "output": 1.25},
+            model_params={
+                "extra_headers": {"anthropic-beta": "different-value"}
+            }
+        )
+
+        assert llm.is_prompt_caching_enabled is False
+
+    def test_prepare_messages_prompt_only(self):
+        """Test prepare_messages with Prompt object only."""
+        llm = LLM(
+            backend="openai",
+            model="gpt-4o-mini",
+            cost={"input": 0.15, "output": 0.60}
+        )
+
+        prompt = Prompt(
+            user="What is the capital of France?",
+            system="You are a geography expert."
+        )
+
+        messages = llm.prepare_messages(prompt=prompt)
+        message_list = messages.get()
+
+        assert len(message_list) == 2
+        assert message_list[0]["role"] == "system"
+        assert message_list[0]["content"] == "You are a geography expert."
+        assert message_list[1]["role"] == "user"
+        assert message_list[1]["content"] == "What is the capital of France?"
+
+    def test_prepare_messages_prompt_no_system(self):
+        """Test prepare_messages with Prompt object without system message."""
+        llm = LLM(
+            backend="openai",
+            model="gpt-4o-mini",
+            cost={"input": 0.15, "output": 0.60}
+        )
+
+        prompt = Prompt(user="Hello!")
+
+        messages = llm.prepare_messages(prompt=prompt)
+        message_list = messages.get()
+
+        assert len(message_list) == 1
+        assert message_list[0]["role"] == "user"
+        assert message_list[0]["content"] == "Hello!"
+
+    def test_prepare_messages_with_messages_object(self):
+        """Test prepare_messages with Messages object."""
+        llm = LLM(
+            backend="openai",
+            model="gpt-4o-mini",
+            cost={"input": 0.15, "output": 0.60}
+        )
+
+        messages = Messages() >> System("Be helpful.") >> User("Hi there!")
+        prepared = llm.prepare_messages(messages=messages)
+        message_list = prepared.get()
+
+        assert len(message_list) == 2
+        assert message_list[0]["role"] == "system"
+        assert message_list[0]["content"] == "Be helpful."
+        assert message_list[1]["role"] == "user"
+        assert message_list[1]["content"] == "Hi there!"
+
+    def test_prepare_messages_claude_prefill(self):
+        """Test prepare_messages with Claude model and prefill."""
+        llm = LLM(
+            backend="anthropic",
+            model="claude-3-haiku-20240307",
+            cost={"input": 0.25, "output": 1.25}
+        )
+
+        messages = Messages() >> User("Complete this: The sky is")
+        prepared = llm.prepare_messages(
+            messages=messages,
+            assistant_prefill="blue"
+        )
+        message_list = prepared.get()
+
+        # Should have user message + assistant prefill
+        assert len(message_list) == 2
+        assert message_list[0]["role"] == "user"
+        assert message_list[1]["role"] == "assistant"
+        assert message_list[1]["content"] == "blue"
+
+    def test_prepare_messages_non_claude_prefill(self):
+        """Test prepare_messages with non-Claude model and prefill."""
+        llm = LLM(
+            backend="openai",
+            model="gpt-4o-mini",
+            cost={"input": 0.15, "output": 0.60}
+        )
+
+        messages = Messages() >> User("Complete this: The sky is")
+        prepared = llm.prepare_messages(
+            messages=messages,
+            assistant_prefill="blue"
+        )
+        message_list = prepared.get()
+
+        # Should have user message + assistant prefill + continuation user message
+        assert len(message_list) == 3
+        assert message_list[0]["role"] == "user"
+        assert message_list[1]["role"] == "assistant"
+        assert message_list[1]["content"] == "blue"
+        assert message_list[2]["role"] == "user"
+        assert "continue" in message_list[2]["content"].lower()
+
+    @patch('lmapis.llm.LLM._chat_completion')
+    def test_log_interaction_success(self, mock_chat_completion):
+        """Test logging of successful interaction."""
+        # Setup mock response
+        mock_response = Mock()
+        mock_response.choices = [Mock()]
+        mock_response.choices[0].message.content = "Test response"
+        mock_response.choices[0].finish_reason = "stop"
+        mock_response.usage.prompt_tokens = 10
+        mock_response.usage.completion_tokens = 5
+        mock_chat_completion.return_value = mock_response
+
+        # Setup mock logger
+        mock_logger = Mock(spec=LLMLogger)
+        mock_logger.is_enabled.return_value = True
+
+        llm = LLM(
+            backend="openai",
+            model="gpt-4o-mini",
+            cost={"input": 0.15, "output": 0.60},
+            logger=mock_logger
+        )
+
+        messages = Messages() >> User("Test message")
+        result = llm.chat_completion(messages)
+
+        # Verify response is returned
+        assert result == mock_response
+
+        # Verify logger was called
+        mock_logger.log_interaction.assert_called_once()
+
+        # Verify log entry details
+        log_entry = mock_logger.log_interaction.call_args[0][0]
+        assert isinstance(log_entry, LogEntry)
+        assert log_entry.model == "gpt-4o-mini"
+        assert log_entry.backend == "openai"
+        assert log_entry.response_content == "Test response"
+        assert log_entry.finish_reason == "stop"
+        assert log_entry.tokens_prompt == 10
+        assert log_entry.tokens_completion == 5
+        assert log_entry.error is None
+
+    @patch('lmapis.llm.LLM._chat_completion')
+    def test_log_interaction_error(self, mock_chat_completion):
+        """Test logging of failed interaction."""
+        # Setup mock to raise exception
+        test_error = Exception("API Error")
+        mock_chat_completion.side_effect = test_error
+
+        # Setup mock logger
+        mock_logger = Mock(spec=LLMLogger)
+        mock_logger.is_enabled.return_value = True
+
+        llm = LLM(
+            backend="openai",
+            model="gpt-4o-mini",
+            cost={"input": 0.15, "output": 0.60},
+            logger=mock_logger
+        )
+
+        messages = Messages() >> User("Test message")
+
+        # Verify exception is raised
+        with pytest.raises(Exception, match="API Error"):
+            llm.chat_completion(messages)
+
+        # Verify logger was called
+        mock_logger.log_interaction.assert_called_once()
+
+        # Verify log entry details
+        log_entry = mock_logger.log_interaction.call_args[0][0]
+        assert log_entry.error == "API Error"
+        assert log_entry.response_content is None
+
+    def test_log_interaction_disabled_logger(self):
+        """Test that logging is skipped when logger is disabled."""
+        # Setup mock logger that's disabled
+        mock_logger = Mock(spec=LLMLogger)
+        mock_logger.is_enabled.return_value = False
+
+        llm = LLM(
+            backend="openai",
+            model="gpt-4o-mini",
+            cost={"input": 0.15, "output": 0.60},
+            logger=mock_logger
+        )
+
+        # Call _log_interaction directly
+        llm._log_interaction(
+            messages=[],
+            parameters={},
+            response=None,
+            start_time=0,
+            end_time=1,
+            request_id="test",
+            error=None
+        )
+
+        # Verify logger was not called
+        mock_logger.log_interaction.assert_not_called()
+
+    def test_extract_thinking_content_with_tags(self):
+        """Test extraction of thinking content from response."""
+        mock_response = Mock()
+        mock_response.choices = [Mock()]
+        mock_response.choices[
+            0].message.content = "<think>This is my reasoning</think>This is the answer"
+
+        result_response, reasoning = LLM._extract_thinking_content(mock_response)
+
+        assert reasoning == "This is my reasoning"
+        assert result_response.choices[0].message.content == "This is the answer"
+
+    def test_extract_thinking_content_without_tags(self):
+        """Test extraction when no thinking tags are present."""
+        mock_response = Mock()
+        mock_response.choices = [Mock()]
+        mock_response.choices[0].message.content = "This is just a regular response"
+
+        result_response, reasoning = LLM._extract_thinking_content(mock_response)
+
+        assert reasoning is None
+        assert result_response.choices[
+                   0].message.content == "This is just a regular response"
+
+    def test_extract_thinking_content_no_choices(self):
+        """Test extraction when response has no choices."""
+        mock_response = Mock()
+        mock_response.choices = []
+
+        result_response, reasoning = LLM._extract_thinking_content(mock_response)
+
+        assert reasoning is None
+        assert result_response == mock_response
