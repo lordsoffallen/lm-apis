@@ -994,7 +994,7 @@ class TestLLMIntegration:
         self._run_simple_prompt(llm, "10")  # 5+5=10
 
     @pytest.mark.skipif(
-        not is_env_set("GOOGLE_API_KEY"), reason="Test requires Google API key"
+        not is_env_set("GEMINI_API_KEY"), reason="Test requires Gemini API key"
     )
     def test_gemini_25_flash_integration(self, envs):
         """Test LLM with Gemini 2.5 Flash."""
@@ -1002,7 +1002,7 @@ class TestLLMIntegration:
         self._run_simple_prompt(llm, "12")  # 6+6=12
 
     @pytest.mark.skipif(
-        not is_env_set("GOOGLE_API_KEY"), reason="Test requires Google API key"
+        not is_env_set("GEMINI_API_KEY"), reason="Test requires Gemini API key"
     )
     def test_gemini_25_pro_integration(self, envs):
         """Test LLM with Gemini 2.5 Pro."""

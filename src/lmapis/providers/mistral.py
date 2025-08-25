@@ -1,8 +1,7 @@
 from lmapis.base import BaseLMApi, BaseAsyncLMApi
 from lmapis.utils.auth import get_api_key_from_env
-from mistralai import Mistral, Chat
-
-import time
+from mistralai import Mistral
+from mistralai.chat import Chat
 
 
 class LMApi(BaseLMApi):
