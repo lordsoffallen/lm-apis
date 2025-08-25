@@ -230,7 +230,7 @@ class TestLLMLoggingIntegration:
             messages = Messages() >> System("You are helpful") >> User("Hello")
             
             # Call the model - should work despite logging failure
-            result = llm._completion_with_logging(messages)
+            result = llm.chat_completion(messages)
             
             # Verify the API call was made successfully
             assert mock_client.chat.completions.create.called
@@ -268,7 +268,7 @@ class TestLLMLoggingIntegration:
             messages = Messages() >> System("You are helpful") >> User("Hello")
             
             # Call the model
-            result = llm._completion_with_logging(messages)
+            result = llm.chat_completion(messages)
             
             # Verify the API call was made
             assert mock_client.chat.completions.create.called
@@ -308,7 +308,7 @@ class TestLLMLoggingIntegration:
             messages = Messages() >> System("You are helpful") >> User("Hello")
             
             # Call the model - should succeed
-            result = llm._completion_with_logging(messages)
+            result = llm.chat_completion(messages)
             
             # Verify the call succeeded
             assert result == mock_response
@@ -353,7 +353,7 @@ class TestLLMLoggingIntegration:
             messages = Messages() >> System("You are helpful") >> User("Hello")
             
             # Call the model
-            result = llm._completion_with_logging(messages)
+            result = llm.chat_completion(messages)
             
             # Verify the API call was made
             assert mock_client.chat.completions.create.called
@@ -401,7 +401,7 @@ class TestLLMLoggingIntegration:
             messages = llm._get_messages(messages, prefill)
             
             # Call the model with prefill
-            result = llm._completion_with_logging(messages)
+            result = llm.chat_completion(messages)
             
             # Verify the API call was made
             assert mock_client.chat.completions.create.called
@@ -493,7 +493,7 @@ class TestLLMLoggingIntegration:
             # Time calls with logging
             start_time = time.time()
             for _ in range(10):
-                llm_with_logger._completion_with_logging(messages)
+                llm_with_logger.chat_completion(messages)
             with_logging_time = time.time() - start_time
             
             # Reset mock call count
@@ -502,7 +502,7 @@ class TestLLMLoggingIntegration:
             # Time calls without logging
             start_time = time.time()
             for _ in range(10):
-                llm_without_logger._completion_with_logging(messages)
+                llm_without_logger.chat_completion(messages)
             without_logging_time = time.time() - start_time
             
             # Verify logging doesn't add excessive overhead (less than 3x increase)
