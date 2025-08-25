@@ -193,9 +193,6 @@ class LLM:
         request_id = f"req_{uuid.uuid4().hex[:8]}"
         start_time = time.time()
         
-        response = None
-        error = None
-        
         try:
             response = self.chat_completion(messages, **kwargs)
             end_time = time.time()
@@ -229,8 +226,9 @@ class LLM:
             # Re-raise the exception to maintain existing behavior
             raise
 
+    @staticmethod
     def _extract_thinking_content(
-        self, response: ChatCompletion | Any
+        response: ChatCompletion | Any
     ) -> tuple[ChatCompletion | Any, str | None]:
         """
         Extract content between <think> tags if present and store it in reasoning_content.
@@ -325,6 +323,7 @@ class LLM:
     ) -> Assistant:
         """ Default chat completion endpoint """
         cost = 0
+        extra_kwargs = dict(tools=tools) if tools is not None else {}
 
         if messages is None:
             user = prompt.user
@@ -336,7 +335,7 @@ class LLM:
             messages = Messages() >> System(system) >> User(user)
 
         messages = self._get_messages(messages, assistant_prefill)
-        output = self._call_model(messages, tools=tools)
+        output = self._call_model(messages, **extra_kwargs)
         output, reasoning_content = self._extract_thinking_content(output)
         finish_reason = parse_finish_reason(output)
 
@@ -358,8 +357,8 @@ class LLM:
             logger.info(
                 "Reached max token output, calling the model with prev output"
             )
-
-            output = self._call_model(messages, assistant, tools=tools)
+            messages = self._get_messages(messages, assistant)
+            output = self._call_model(messages, **extra_kwargs)
             output, reasoning_content = self._extract_thinking_content(output)
             assistant.content += Assistant.from_model_response(output, reasoning_content).content
             # Update finish reason
