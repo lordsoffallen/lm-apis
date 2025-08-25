@@ -180,7 +180,7 @@ class LLM:
         ),
         reraise=True
     )
-    def chat_completion(self, messages: Messages, **kwargs) -> ChatCompletion:
+    def _chat_completion(self, messages: Messages, **kwargs) -> ChatCompletion:
         return self.llm.client.chat.completions.create(
             model=self.model,
             messages=messages.get(),
@@ -188,13 +188,13 @@ class LLM:
             **kwargs
         )
 
-    def _call_model(self, messages: Messages, **kwargs) -> ChatCompletion:
+    def chat_completion(self, messages: Messages, **kwargs) -> ChatCompletion:
         # Generate unique request ID for this interaction
         request_id = f"req_{uuid.uuid4().hex[:8]}"
         start_time = time.time()
         
         try:
-            response = self.chat_completion(messages, **kwargs)
+            response = self._chat_completion(messages, **kwargs)
             end_time = time.time()
             
             self._log_interaction(
@@ -256,72 +256,14 @@ class LLM:
 
         return response, reasoning_content
 
-    # TODO delete or include this
-    # def _tool_runner(
-    #     self,
-    #     *,
-    #     messages: Messages = None,
-    #     assistant_prefill: str | Assistant = None,
-    #     tools: list[dict] = None,
-    #     max_turns: int = 1,
-    #     **kwargs,
-    # ):
-    #     """
-    #     Handle tool execution loop for max_turns iterations.
-    #
-    #     Args:
-    #         provider: The provider instance to use for completions
-    #         model_name: Name of the model to use
-    #         messages: List of conversation messages
-    #         tools: Tools instance or list of callable tools
-    #         max_turns: Maximum number of tool execution turns
-    #         **kwargs: Additional arguments to pass to the provider
-    #
-    #     Returns:
-    #         The final response from the model with intermediate responses and messages
-    #     """
-    #
-    #     turns = 0
-    #     messages = self._get_messages(messages, assistant_prefill)
-    #     all_messages = messages.get(as_dict=False)
-    #
-    #     while turns < max_turns:
-    #         # Make the API call
-    #         assistant = self(messages=messages, tools=tools, **kwargs)
-    #
-    #         if not assistant.tool_calls:
-    #             return assistant
-    #
-    #
-    #
-    #         # Execute tools and get results
-    #         results, tool_messages = tools_instance.execute_tool(tool_calls)
-    #
-    #         # Add tool messages to intermediate messages
-    #         intermediate_messages.extend(tool_messages)
-    #
-    #         # Add the assistant's response and tool results to messages
-    #         messages.extend([response.choices[0].message, *tool_messages])
-    #
-    #         turns += 1
-    #
-    #     # Set the intermediate data in the final response
-    #     response.intermediate_responses = intermediate_responses[
-    #         :-1
-    #     ]  # Exclude final response
-    #     response.choices[0].intermediate_messages = intermediate_messages
-    #     return response
-
-    def __call__(
+    def _call_model(
         self,
         *,
         prompt: Prompt = None,
         messages: Messages = None,
         assistant_prefill: str | Assistant = None,
         tools: list[dict] = None,
-        **kwargs,
     ) -> Assistant:
-        """ Default chat completion endpoint """
         cost = 0
         extra_kwargs = dict(tools=tools) if tools is not None else {}
 
@@ -335,7 +277,7 @@ class LLM:
             messages = Messages() >> System(system) >> User(user)
 
         messages = self._get_messages(messages, assistant_prefill)
-        output = self._call_model(messages, **extra_kwargs)
+        output = self.chat_completion(messages, **extra_kwargs)
         output, reasoning_content = self._extract_thinking_content(output)
         finish_reason = parse_finish_reason(output)
 
@@ -358,7 +300,7 @@ class LLM:
                 "Reached max token output, calling the model with prev output"
             )
             messages = self._get_messages(messages, assistant)
-            output = self._call_model(messages, **extra_kwargs)
+            output = self.chat_completion(messages, **extra_kwargs)
             output, reasoning_content = self._extract_thinking_content(output)
             assistant.content += Assistant.from_model_response(output, reasoning_content).content
             # Update finish reason

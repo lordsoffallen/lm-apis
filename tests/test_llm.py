@@ -104,7 +104,7 @@ class TestLLMLoggingIntegration:
             messages = Messages() >> System("You are helpful") >> User("Hello")
             
             # Call the model - should work normally
-            result = llm._call_model(messages)
+            result = llm.chat_completion(messages)
             
             # Verify the call was made
             assert mock_client.chat.completions.create.called
@@ -136,7 +136,7 @@ class TestLLMLoggingIntegration:
             messages = Messages() >> System("You are helpful") >> User("Hello")
             
             # Call the model
-            result = llm._call_model(messages)
+            result = llm.chat_completion(messages)
             
             # Verify the API call was made
             assert mock_client.chat.completions.create.called
@@ -189,7 +189,7 @@ class TestLLMLoggingIntegration:
             
             # Call the model - should raise exception
             with pytest.raises(Exception, match="Bad Request - invalid parameters"):
-                llm._call_model(messages)
+                llm.chat_completion(messages)
             
             # Verify logging occurred even for failed interaction
             assert mock_storage_backend.save_calls == 1
@@ -230,7 +230,7 @@ class TestLLMLoggingIntegration:
             messages = Messages() >> System("You are helpful") >> User("Hello")
             
             # Call the model - should work despite logging failure
-            result = llm._call_model(messages)
+            result = llm._completion_with_logging(messages)
             
             # Verify the API call was made successfully
             assert mock_client.chat.completions.create.called
@@ -268,7 +268,7 @@ class TestLLMLoggingIntegration:
             messages = Messages() >> System("You are helpful") >> User("Hello")
             
             # Call the model
-            result = llm._call_model(messages)
+            result = llm._completion_with_logging(messages)
             
             # Verify the API call was made
             assert mock_client.chat.completions.create.called
@@ -308,7 +308,7 @@ class TestLLMLoggingIntegration:
             messages = Messages() >> System("You are helpful") >> User("Hello")
             
             # Call the model - should succeed
-            result = llm._call_model(messages)
+            result = llm._completion_with_logging(messages)
             
             # Verify the call succeeded
             assert result == mock_response
@@ -353,7 +353,7 @@ class TestLLMLoggingIntegration:
             messages = Messages() >> System("You are helpful") >> User("Hello")
             
             # Call the model
-            result = llm._call_model(messages)
+            result = llm._completion_with_logging(messages)
             
             # Verify the API call was made
             assert mock_client.chat.completions.create.called
@@ -401,7 +401,7 @@ class TestLLMLoggingIntegration:
             messages = llm._get_messages(messages, prefill)
             
             # Call the model with prefill
-            result = llm._call_model(messages)
+            result = llm._completion_with_logging(messages)
             
             # Verify the API call was made
             assert mock_client.chat.completions.create.called
@@ -493,7 +493,7 @@ class TestLLMLoggingIntegration:
             # Time calls with logging
             start_time = time.time()
             for _ in range(10):
-                llm_with_logger._call_model(messages)
+                llm_with_logger._completion_with_logging(messages)
             with_logging_time = time.time() - start_time
             
             # Reset mock call count
@@ -502,7 +502,7 @@ class TestLLMLoggingIntegration:
             # Time calls without logging
             start_time = time.time()
             for _ in range(10):
-                llm_without_logger._call_model(messages)
+                llm_without_logger._completion_with_logging(messages)
             without_logging_time = time.time() - start_time
             
             # Verify logging doesn't add excessive overhead (less than 3x increase)
