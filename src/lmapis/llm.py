@@ -251,6 +251,70 @@ class LLM:
             # Re-raise the exception to maintain existing behavior
             raise
 
+    @retry(
+        wait=wait_exponential(multiplier=1, min=4, max=10),
+        stop=stop_after_attempt(10),
+        retry=retry_if_exception(should_retry_exception),
+        before_sleep=lambda retry_state: logger.warning(
+            f"Retrying {retry_state.fn.__name__} "
+            f"(attempt {retry_state.attempt_number}) due to: "
+            f"{retry_state.outcome.exception()}"
+        ),
+        reraise=True
+    )
+    def _chat_completion_parse(
+        self, messages: Messages, response_format: Any, **kwargs
+    ) -> Any:
+        return self.llm.client.beta.chat.completions.parse(
+            model=self.model,
+            messages=messages.get(),
+            response_format=response_format,
+            **self.model_params,
+            **kwargs
+        )
+
+    def chat_completion_parse(
+        self, messages: Messages, response_format: Any, **kwargs
+    ) -> ChatCompletion:
+        # Generate unique request ID for this interaction
+        request_id = f"req_{uuid.uuid4().hex[:8]}"
+        start_time = time.time()
+
+        try:
+            response = self._chat_completion_parse(
+                messages, response_format=response_format, **kwargs
+            )
+            end_time = time.time()
+
+            self._log_interaction(
+                messages=messages.get(),
+                parameters={**self.model_params, **kwargs},
+                response=response,
+                start_time=start_time,
+                end_time=end_time,
+                request_id=request_id,
+                error=None
+            )
+
+            return response
+
+        except Exception as e:
+            end_time = time.time()
+            error = e
+
+            self._log_interaction(
+                messages=messages.get(),
+                parameters={**self.model_params, **kwargs},
+                response=None,
+                start_time=start_time,
+                end_time=end_time,
+                request_id=request_id,
+                error=error
+            )
+
+            # Re-raise the exception to maintain existing behavior
+            raise
+
     @staticmethod
     def _extract_thinking_content(
         response: ChatCompletion | Any
@@ -333,7 +397,7 @@ class LLM:
                 logger.error(f"Model response={output.to_dict()}")
                 raise ValueError("Model is finished with another reason.")
 
-        self.call_cost = cost
+        self._call_cost = cost
 
         return assistant
 
@@ -400,3 +464,49 @@ class LLM:
             #     ]  # Exclude final response
             #     response.choices[0].intermediate_messages = intermediate_messages
             #     return response
+
+    def _call_model_parse(
+        self,
+        *,
+        response_format: Any,
+        prompt: Prompt = None,
+        messages: Messages = None,
+        tools: list[dict] = None,
+    ) -> Assistant:
+        cost = 0
+        extra_kwargs = dict(tools=tools) if tools is not None else {}
+
+        messages = self.prepare_messages(prompt=prompt, messages=messages)
+        output = self.chat_completion_parse(
+            messages, response_format=response_format, **extra_kwargs
+        )
+        finish_reason = parse_finish_reason(output)
+
+        match finish_reason:
+            case "end_turn" | "stop_sequence" | "stop":
+                pass
+            case _:
+                # Model didn't stop naturally so we raise error
+                try:
+                    resp = output.to_dict()
+                except AttributeError:
+                    resp = output.model_dump(mode="python")
+
+                logger.error(f"Model response={resp}")
+                raise ValueError("Model is finished with another reason.")
+
+        if output.choices[0].message.refusal is not None:
+            # Model didn't respond naturally so we raise error
+            logger.error(f"Model response={output.to_dict()}")
+            raise ValueError("Model is finished with a refusal")
+
+        cost = self.compute_cost(output)
+
+        try:
+            out = output.choices[0].message.parsed.model_dump(mode="json")
+        except Exception:   # noqa
+            out = None
+
+        self._call_cost = cost
+
+        return output.choices[0].message.parsed
