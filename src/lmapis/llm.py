@@ -71,6 +71,7 @@ class LLM:
         self.model_params = model_params if model_params is not None else {}
         self.backend_kwargs = backend_kwargs if backend_kwargs is not None else {}
         self.llm_logger = logger
+        self._call_cost = 0
 
         endpoint = get_backend(backend)
         self.llm = endpoint(api_key=self.credentials, **self.backend_kwargs)
@@ -82,6 +83,10 @@ class LLM:
             if extras.get("anthropic-beta") == "prompt-caching-2024-07-31":
                 return True
         return False
+
+    @property
+    def call_cost(self) -> float:
+        return self._call_cost
 
     def compute_cost(self, response: dict | Any | ChatCompletion) -> float:
         inputs = response.usage.prompt_tokens * float(self.cost["input"]) / 1_000_000
@@ -327,6 +332,8 @@ class LLM:
                 # Model didn't stop naturally so we raise error
                 logger.error(f"Model response={output.to_dict()}")
                 raise ValueError("Model is finished with another reason.")
+
+        self.call_cost = cost
 
         return assistant
 
