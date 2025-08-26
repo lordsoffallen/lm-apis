@@ -99,5 +99,5 @@ def should_retry_exception(exception):
     if any(pattern in exception_str for pattern in non_retryable_patterns):
         return False
 
-    # Default to retry for unknown exceptions (you might want to change this)
-    return True
+    # Default to not retry for unknown exceptions
+    return False
