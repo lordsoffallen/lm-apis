@@ -1,7 +1,8 @@
-from .utils.messages import Assistant, Messages, System, User, ChatCompletion
+from .utils.messages import Assistant, Messages, System, User
 from .logging import get_logger,LLMLogger, LogEntry
 from .utils.retry import should_retry_exception
 from .utils.tools import Tools
+from openai.types.chat import ChatCompletion, ParsedChatCompletion
 from textwrap import dedent
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception
 from typing import Any, Optional
@@ -98,7 +99,7 @@ class LLM:
         self,
         messages: list,
         parameters: dict,
-        response: Optional[ChatCompletion],
+        response: Optional[ChatCompletion | ParsedChatCompletion],
         start_time: float,
         end_time: float,
         request_id: str,
@@ -117,14 +118,23 @@ class LLM:
             cost = None
             
             if response is not None:
-                # Extract response content
-                if hasattr(response, 'choices') and response.choices:
-                    response_content = response.choices[0].message.content
+                if isinstance(response, ParsedChatCompletion):
+                    try:
+                        response_content = \
+                            response.choices[0].message.parsed.model_dump(mode="json")
+                    except Exception:   # noqa
+                        logger.error("Failed to parse the model response to json")
+                        response_content = ""
                     finish_reason = response.choices[0].finish_reason
                 else:
-                    response_content = getattr(response, 'content', str(response))
-                    finish_reason = getattr(response, 'stop_reason', 'unknown')
-                
+                    # Extract response content
+                    if hasattr(response, 'choices') and response.choices:
+                        response_content = response.choices[0].message.content
+                        finish_reason = response.choices[0].finish_reason
+                    else:
+                        response_content = getattr(response, 'content', str(response))
+                        finish_reason = getattr(response, 'stop_reason', 'unknown')
+
                 # Extract token usage and compute cost
                 if hasattr(response, 'usage'):
                     tokens_prompt = response.usage.prompt_tokens
@@ -472,8 +482,7 @@ class LLM:
         prompt: Prompt = None,
         messages: Messages = None,
         tools: list[dict] = None,
-    ) -> Assistant:
-        cost = 0
+    ) -> Any:
         extra_kwargs = dict(tools=tools) if tools is not None else {}
 
         messages = self.prepare_messages(prompt=prompt, messages=messages)
@@ -501,11 +510,6 @@ class LLM:
             raise ValueError("Model is finished with a refusal")
 
         cost = self.compute_cost(output)
-
-        try:
-            out = output.choices[0].message.parsed.model_dump(mode="json")
-        except Exception:   # noqa
-            out = None
 
         self._call_cost = cost
 
