@@ -57,7 +57,7 @@ def _convert_single_message(
                 )
             ]
         )
-    elif msg["role"] == "assistant" and "tool_calls" in msg:
+    elif msg["role"] == "assistant" and msg.get("tool_calls") is not None:
         message_content = []
         if msg["content"]:
             message_content.append(TextBlock(type="text", text=msg["content"]))
@@ -87,7 +87,7 @@ def _convert_single_message(
 
 
 def convert_messages(
-    messages: Iterable[ChatCompletionMessageParam]
+    messages: Iterable[ChatCompletionMessageParam | dict]
 ) -> tuple[list[TextBlock], Iterable[utils.MessageParam]]:
     system = []
 
