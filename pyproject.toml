@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=42", "wheel", "setuptools_scm>=6.2"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
 
 [project]
 name = "lmapis"
@@ -23,25 +23,29 @@ dependencies = [
     "tenacity>=9.0.0",
     "google-cloud-aiplatform>=1.75.0",
     "mistralai>=1.2.6",
+    "fsspec>=2023.1.0",
 ]
 dynamic = ["version"]
 
-[tool.setuptools_scm]
-# Uses git tags and commits for versioning
-write_to = "src/lmapis/_version.py"
-# This format will create versions like: 0.1.0.dev123+g12ab34cd.d20230101
-version_scheme = "post-release"
-local_scheme = "node-and-date"
+[tool.hatch.version]
+source = "vcs"
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.hatch.build.hooks.vcs]
+version-file = "src/lmapis/_version.py"
 
-[project.optional-dependencies]
+[tool.hatch.build.targets.wheel]
+packages = ["src/lmapis"]
+
+[dependency-groups]
 dev = [
+    "dotenv>=0.9.9",
     "pytest>=7.0.0",
     "pytest-asyncio>=0.26.0",
+    "pytest-cov>=4.0.0",
     "black>=23.0.0",
     "isort>=5.12.0",
+    "coverage>=7.0.0",
+    "PyYAML>=6.0.0",
 ]
 
 [project.urls]

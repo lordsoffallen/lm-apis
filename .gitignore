@@ -58,3 +58,6 @@ MANIFEST
 
 # tmp dir
 tmp
+
+.kiro
+src/lmapis/_version.py
