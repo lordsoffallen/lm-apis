@@ -125,5 +125,11 @@ class Messages:
     def get(self, as_dict: bool = True):
         """Get messages as dictionaries (default) or raw BaseMessage objects"""
         if as_dict:
-            return [asdict(msg) for msg in self.messages]
+            msgs = []
+            for msg in self.messages:
+                if hasattr(msg, "asdict"):
+                    msgs.append(msg.asdict())
+                else:
+                    msgs.append(asdict(msg))
+            return msgs
         return deepcopy(self.messages)
