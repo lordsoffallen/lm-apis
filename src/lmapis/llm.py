@@ -26,6 +26,8 @@ def get_backend(name: str, async_api: bool = False):
         "google-genai": "lmapis.providers.google_genai",
         "fireworks": "lmapis.providers.fireworks",
         "anthropic": "lmapis.providers.anthropic",
+        "anthropic-bedrock": "lmapis.providers.anthropic_bedrock",
+        "anthropic-vertex": "lmapis.providers.anthropic_vertex",
         "mistral": "lmapis.providers.mistral",
     }
 
