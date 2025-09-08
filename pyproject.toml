@@ -51,3 +51,8 @@ dev = [
 [project.urls]
 "Homepage" = "https://github.com/lordsoffallen/lm-apis"
 "Bug Tracker" = "https://github.com/lordsoffallen/lm-apis/issues"
+
+[project.optional-dependencies]
+bedrock = [
+    "boto3>=1.40.25",
+]
