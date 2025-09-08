@@ -558,8 +558,17 @@ class TestLLMUnit:
     def test_get_backend_valid_names(self):
         """Test get_backend function with valid provider names."""
         providers = [
-            "openai", "anthropic", "google", "google-genai",
-            "together", "together-ai", "togetherai", "fireworks", "mistral"
+            "openai",
+            "anthropic",
+            "anthropic-bedrock",
+            "anthropic-vertex",
+            "google",
+            "google-genai",
+            "together",
+            "together-ai",
+            "togetherai",
+            "fireworks",
+            "mistral"
         ]
 
         for provider in providers:
