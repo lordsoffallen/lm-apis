@@ -1,5 +1,5 @@
 from lmapis.providers.openai import LMApi
-from lmapis.utils.messages import Messages, User
+from lmapis.utils.messages import Messages, User, Assistant
 from pytest import raises, mark
 from ..conftest import is_env_set
 
@@ -18,7 +18,26 @@ def test_messages():
     output = Messages() >> User(content)
 
     assert isinstance(output.get(), list)
-    assert len(output.get()) == 2
+    assert len(output.get()) == 1
+    assert all([isinstance(i, dict) for i in output.get()])
+
+
+def test_assistant():
+    content = "Why is sky blue?"
+
+    output = Messages() >> Assistant(content)
+
+    assert isinstance(output.get(), list)
+    assert len(output.get()) == 1
+    assert all([isinstance(i, dict) for i in output.get()])
+
+def test_assistant_empty():
+    content = "Why is sky blue?"
+
+    output = Messages() >> Assistant(content, tool_calls=[])
+
+    assert isinstance(output.get(), list)
+    assert len(output.get()) == 1
     assert all([isinstance(i, dict) for i in output.get()])
 
 

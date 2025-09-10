@@ -84,7 +84,7 @@ class Assistant(BaseMessage):
 
     def asdict(self) -> dict:
         d = asdict(self)
-        d = {k:v for k, v in d.items() if v is not None}
+        d = {k:v for k, v in d.items() if v not in [None, []]}
         if "tool_calls" in d.keys():
             # Parse pydantic as dict here
             d["tool_calls"] = [i.model_dump(mode="python") for i in d["tool_calls"]]
