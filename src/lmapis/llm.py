@@ -396,7 +396,11 @@ class LLM:
             messages = self._get_messages(messages, assistant)
             output = self.chat_completion(messages, **extra_kwargs)
             output, reasoning_content = self._extract_thinking_content(output)
-            assistant.content += Assistant.from_model_response(output, reasoning_content).content
+            new_response = Assistant.from_model_response(output, reasoning_content).content
+            if new_response == "" or None:
+                raise ValueError("Failed to generate a new response as model didn't "
+                                 "complete the request within the defined output tokens")
+            assistant.content += new_response
             # Update finish reason
             finish_reason = parse_finish_reason(output)
             cost += self.compute_cost(output)
