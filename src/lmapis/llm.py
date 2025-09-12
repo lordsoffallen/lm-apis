@@ -1,12 +1,13 @@
 from .utils.messages import Assistant, Messages, System, User
 from .logging import get_logger,LLMLogger, LogEntry
 from .utils.retry import should_retry_exception
-from .utils.tools import Tools
+from .utils.tools import Tools, execute_tool, handle_text_editor_tool
 from openai.types.chat import ChatCompletion, ParsedChatCompletion
 from textwrap import dedent
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception
-from typing import Any, Optional
+from typing import Any, Optional, Callable
 from dataclasses import dataclass
+from functools import partial
 
 import time
 import uuid
@@ -363,9 +364,13 @@ class LLM:
         prompt: Prompt = None,
         messages: Messages = None,
         assistant_prefill: str | Assistant = None,
-        tools: list[dict] = None,
+        tools: Tools = None,
     ) -> Assistant:
         cost = 0
+
+        if tools:
+            tools = tools.format()
+
         extra_kwargs = dict(tools=tools) if tools is not None else {}
 
         messages = self.prepare_messages(
@@ -423,10 +428,11 @@ class LLM:
         prompt: Prompt = None,
         messages: Messages = None,
         assistant_prefill: str | Assistant = None,
-        tools: list[dict] = None,
+        tools: Tools = None,
         max_turns: int = 0,
+        tool_text_input: str = None,
         **kwargs,
-    ) -> Assistant:
+    ) -> Assistant | str:
         """
         Call an LLM endpoint.
 
@@ -436,9 +442,10 @@ class LLM:
             assistant_prefill: Only for Claude models, response completion text
             tools: Specific tools for model to use.
             max_turns: If more than 1 then call will auto tool calling that many times.
+            tool_text_input: Provided input text for claude's text replacement tool
 
         Returns:
-            Assistant response
+            Assistant response or string if tool text is used
         """
 
         if max_turns == 0:
@@ -450,36 +457,38 @@ class LLM:
             )
             return assistant
         else:
-            raise NotImplementedError
-            # turns = 0
-            # messages = self.prepare_messages(
-            #     prompt=prompt, messages=messages, assistant_prefill=assistant_prefill
-            # )
-            # all_messages = messages.get(as_dict=False)
-            #
-            # while turns < max_turns:
-            #     assistant = self._call_model(messages=messages, tools=tools)
-            #
-            #     if not assistant.tool_calls:
-            #         return assistant
+            turns = 0
 
-                # TODO Make the tool call and return the response here
-            #     results, tool_messages = tools_instance.execute_tool(tool_calls)
-            #
-            #     # Add tool messages to intermediate messages
-            #     intermediate_messages.extend(tool_messages)
-            #
-            #     # Add the assistant's response and tool results to messages
-            #     messages.extend([response.choices[0].message, *tool_messages])
-            #
-            #     turns += 1
-            #
-            #     # Set the intermediate data in the final response
-            #     response.intermediate_responses = intermediate_responses[
-            #         :-1
-            #     ]  # Exclude final response
-            #     response.choices[0].intermediate_messages = intermediate_messages
-            #     return response
+            # We manage the whole messages history
+            messages = self.prepare_messages(
+                prompt=prompt, messages=messages, assistant_prefill=assistant_prefill
+            )
+
+            text_input = tool_text_input
+            
+            while turns < max_turns:
+                assistant = self._call_model(messages=messages, tools=tools)
+            
+                if not assistant.tool_calls:
+                    return assistant
+
+                # First expand the messages with assistant response
+                messages = messages >> assistant
+
+                # TODO if we do text replacement call, we get updated text in the tool response
+                # so in the next stage we should pass the `newly` updated string here
+                # Find the index from the results which contains the updated text string and pass the newly text in the next call
+
+                results, tool_messages = execute_tool(
+                    tools, assistant.tool_calls, tool_text_input=text_input
+                )
+
+                for tm in tool_messages:
+                    messages = messages >> tm
+
+                turns += 1
+
+            return updated_text
 
     def _call_model_parse(
         self,
@@ -487,8 +496,11 @@ class LLM:
         response_format: Any,
         prompt: Prompt = None,
         messages: Messages = None,
-        tools: list[dict] = None,
+        tools: Tools = None,
     ) -> Any:
+        if tools:
+            tools = tools.format()
+
         extra_kwargs = dict(tools=tools) if tools is not None else {}
 
         messages = self.prepare_messages(prompt=prompt, messages=messages)

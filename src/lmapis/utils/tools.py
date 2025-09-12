@@ -91,15 +91,36 @@ def handle_text_editor_tool(
         )
 
 
+def _validate_format(format: str) -> str:
+    """Validate that the format is supported."""
+    supported_formats = ["openai", "anthropic"]
+    if format not in supported_formats:
+        raise ValueError(f"Unsupported format '{format}'. "
+                         f"Supported formats: {supported_formats}")
+    return format
+
+
 class Tools:
-    def __init__(self, tools: list[Callable | dict] | dict = None):
+    def __init__(self, tools: list[Callable | dict] | dict = None, api_format: str = "openai"):
+        """Initialize Tools with optional format specification.
+        
+        Args:
+            tools: List of callable functions or dict tool specifications
+            api_format: Output format for tools ("openai" or "anthropic")
+        """
         self._tools = {}
+        self._format = _validate_format(api_format)
+        
         if tools:
             if not isinstance(tools, list):
                 tools = [tools]
 
             for tool in tools:
                 self._add_tool(tool)
+
+    @property
+    def tools(self):
+        return self._tools
 
     def _add_tool(
         self, func: Callable | dict, param_model: Optional[Type[BaseModel]] = None
@@ -120,17 +141,48 @@ class Tools:
                 "spec": tool_spec,
             }
 
-    def tools(self, format="openai") -> list:
-        """Return tools in the specified format (default OpenAI).
-        For anthropic else return as is and for others returns the spec fields"""
-        if format == "openai":
-            return [
-                {"type": "function", "function": tool["spec"]}
-                for tool in self._tools.values()
-            ]
-        elif format == "anthropic":
+    def format(self, api_format: str = None) -> list:
+        """Return tools in the specified format.
+        
+        Args:
+            api_format: Output format ("openai" or "anthropic"). If None, uses instance format.
+            
+        Returns:
+            List of tool specifications in the requested format
+        """
+        # Use instance format if no format specified
+        if api_format is None:
+            api_format = self._format
+        else:
+            # Validate the provided format
+            api_format = _validate_format(api_format)
+            
+        if api_format == "openai":
+            result = []
+            for tool in self._tools.values():
+                if isinstance(tool, dict) and "spec" in tool:
+                    # Function-based tool with spec
+                    result.append({"type": "function", "function": tool["spec"]})
+                elif isinstance(tool, dict):
+                    # Dict-based tool (already in spec format)
+                    result.append({"type": "function", "function": tool})
+                else:
+                    # Fallback for unexpected format
+                    result.append({"type": "function", "function": tool})
+            return result
+        elif api_format == "anthropic":
             return [tool for tool in self._tools.values()]
-        return [tool["spec"] for tool in self._tools.values()]
+        
+        # Default format - return specs only
+        result = []
+        for tool in self._tools.values():
+            if isinstance(tool, dict) and "spec" in tool:
+                result.append(tool["spec"])
+            elif isinstance(tool, dict):
+                result.append(tool)
+            else:
+                result.append(tool)
+        return result
 
     @staticmethod
     def _convert_to_tool_spec(func: Callable, param_model: Type[BaseModel]) -> dict[str, Any]:
@@ -252,64 +304,66 @@ class Tools:
 
         return tool_spec, param_model
 
-    def execute_tool(
-        self,
-        tool_calls: list[ChatCompletionMessageToolCall] | ChatCompletionMessageToolCall,
-        callback_func: Callable[[ChatCompletionMessageToolCall], Tool | tuple[str, Tool]] = None
-    ) -> tuple[list[Any], list[Tool]]:
-        """Executes registered tools based on the tool calls from the model.
 
-        Args:
-            tool_calls: List of tool calls from the model
-            callback_func: Callback function to pass tool call directly
+def execute_tool(
+    tools: Tools,
+    tool_calls: list[ChatCompletionMessageToolCall] | ChatCompletionMessageToolCall,
+    tool_text_input: str = None,
+) -> tuple[list[Any], list[Tool]]:
+    """Executes registered tools based on the tool calls from the model.
 
-        Returns:
-            List of tuples containing (result, result_message) for each tool call
-        """
-        results = []
-        messages = []
+    Args:
+        tools: Defined tools for model api call
+        tool_calls: List of tool calls from the model
+        tool_text_input: Text input for handle text editor function call
 
-        if not isinstance(tool_calls, list):
-            tool_calls = [tool_calls]
+    Returns:
+        List of tuples containing (result, result_message) for each tool call
+    """
+    results = []
+    messages = []
 
-        for tool_call in tool_calls:
-            tool_name = tool_call.function.name
-            arguments = tool_call.function.arguments
-            tool_call_id = tool_call.id
+    if not isinstance(tool_calls, list):
+        tool_calls = [tool_calls]
 
-            # Ensure arguments is a dict
-            if isinstance(arguments, str):
-                arguments = json.loads(arguments)
+    for tool_call in tool_calls:
+        tool_name = tool_call.function.name
+        arguments = tool_call.function.arguments
+        tool_call_id = tool_call.id
 
-            if tool_name not in self._tools:
-                raise ValueError(f"Tool '{tool_name}' not registered.")
+        # Ensure arguments is a dict
+        if isinstance(arguments, str):
+            arguments = json.loads(arguments)
 
-            tool = self._tools[tool_name]
+        if tool_name not in tools.tools:
+            raise ValueError(f"Tool '{tool_name}' not registered.")
 
-            tool_func = tool.get("function")
-            param_model = tool.get("param_model")
+        tool = tools.tools[tool_name]
 
-            if tool_func is not None and param_model is not None:
-                # Validate and parse the arguments with Pydantic if a model exists
-                try:
-                    validated_args = param_model(**arguments)
-                    result = tool_func(**validated_args.model_dump())
+        tool_func = tool.get("function")
+        param_model = tool.get("param_model")
+
+        if tool_func is not None and param_model is not None:
+            # Validate and parse the arguments with Pydantic if a model exists
+            try:
+                validated_args = param_model(**arguments)
+                result = tool_func(**validated_args.model_dump())
+                results.append(result)
+                messages.append(
+                    Tool(content=json.dumps(result), tool_call_id=tool_call_id)
+                )
+            except ValidationError as e:
+                raise ValueError(f"Error in tool '{tool_name}' parameters: {e}")
+        else:
+            # Built in tool call
+            if tool == TEXT_EDITOR_TOOL:
+                # User passes the tool function to run
+                tool_msg = handle_text_editor_tool(tool_call, text=tool_text_input)
+                if isinstance(tool_msg, tuple):
+                    # unpack the results
+                    result, tool_msg = tool_msg
                     results.append(result)
-                    messages.append(
-                        Tool(content=json.dumps(result), tool_call_id=tool_call_id)
-                    )
-                except ValidationError as e:
-                    raise ValueError(f"Error in tool '{tool_name}' parameters: {e}")
+                messages.append(tool_msg)
             else:
-                # Built in tool call
-                if tool == TEXT_EDITOR_TOOL:
-                    # User passes the tool function to run
-                    tool_msg = callback_func(tool_call)
-                    if isinstance(tool_msg, tuple):
-                        # unpack the results
-                        result, tool_msg = tool_msg
-                        results.append(result)
-                    messages.append(tool_msg)
-                else:
-                    raise NotImplementedError(f"This tool is not implemented yet: {tool}")
-        return results, messages
+                raise NotImplementedError(f"This tool is not implemented yet: {tool}")
+    return results, messages
