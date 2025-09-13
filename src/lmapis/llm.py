@@ -177,6 +177,9 @@ class LLM:
         # Prepare messages for the API call
         if "claude" in self.model:
             # Claude supports assistant prefill response
+            # The prefill content cannot end with trailing whitespace. A prefill like
+            # "As an AI assistant, I " (with a space at the end) will result in an error.
+            prefill_response.content = prefill_response.content.rstrip()
             msgs = msgs >> prefill_response
         else:
             if prefill_response is not None:
