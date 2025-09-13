@@ -51,21 +51,28 @@ def handle_text_editor_tool(tool_call: ChatCompletionMessageToolCall, text: str)
             )
         # Check for multiple matches
         match_count = text.count(old_str)
-        if match_count > 1:
+
+        if match_count == 0:
+            return Tool(
+                content=f"Error: No match found. Please try again.",
+                tool_call_id=tool_call.id
+            )
+        elif match_count > 1:
             return Tool(
                 content=f"Error: String appears {match_count} times. "
                         f"Please be more specific.",
                 tool_call_id=tool_call.id
             )
-        # Perform replacement
-        updated_content = text.replace(old_str, new_str, 1)
-        t = Tool(
-            content=f"Text replaced successfully",
-            tool_call_id=tool_call.id
-        )
-        # Attached updated text to access later
-        t.call_response = updated_content
-        return t
+        else:
+            # Perform replacement
+            updated_content = text.replace(old_str, new_str, 1)
+            t = Tool(
+                content=f"Text replaced successfully",
+                tool_call_id=tool_call.id
+            )
+            # Attached updated text to access later
+            t.call_response = updated_content
+            return t
     elif command == 'insert':
         insert_line = input_params.get('insert_line', 0)
         new_text = input_params.get('new_str', '')
