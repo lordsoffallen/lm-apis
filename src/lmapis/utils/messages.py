@@ -168,7 +168,7 @@ class Messages:
                 new_copy.messages.append(message)  # Store raw message object
 
                 # Easy access for input/output files
-                if message.text_files is not None:
+                if getattr(message, "text_files", None):  # Safe access that returns None
                     if isinstance(message, Assistant):
                         new_copy.output_text_files = message.text_files
                     elif isinstance(message, User):

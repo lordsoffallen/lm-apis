@@ -1,7 +1,7 @@
 from .utils.messages import Assistant, Messages, System, User
 from .logging import get_logger,LLMLogger, LogEntry
 from .utils.retry import should_retry_exception
-from .utils.tools import Tools, execute_tool, handle_text_editor_tool
+from .utils.tools import Tools, execute_tool, TEXT_EDITOR_TOOL
 from openai.types.chat import ChatCompletion, ParsedChatCompletion
 from textwrap import dedent
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception
@@ -430,9 +430,8 @@ class LLM:
         assistant_prefill: str | Assistant = None,
         tools: Tools = None,
         max_turns: int = 0,
-        tool_text_input: str = None,
         **kwargs,
-    ) -> Assistant | str:
+    ) -> Assistant:
         """
         Call an LLM endpoint.
 
@@ -442,10 +441,9 @@ class LLM:
             assistant_prefill: Only for Claude models, response completion text
             tools: Specific tools for model to use.
             max_turns: If more than 1 then call will auto tool calling that many times.
-            tool_text_input: Provided input text for claude's text replacement tool
 
         Returns:
-            Assistant response or string if tool text is used
+            Assistant response
         """
 
         if max_turns == 0:
@@ -456,39 +454,42 @@ class LLM:
                 tools=tools,
             )
             return assistant
-        else:
+        elif max_turns >= 1:
             turns = 0
 
             # We manage the whole messages history
             messages = self.prepare_messages(
                 prompt=prompt, messages=messages, assistant_prefill=assistant_prefill
             )
-
-            text_input = tool_text_input
             
-            while turns < max_turns:
+            while turns <= max_turns:
                 assistant = self._call_model(messages=messages, tools=tools)
             
                 if not assistant.tool_calls:
-                    return assistant
+                    break
 
                 # First expand the messages with assistant response
                 messages = messages >> assistant
 
-                # TODO if we do text replacement call, we get updated text in the tool response
-                # so in the next stage we should pass the `newly` updated string here
-                # Find the index from the results which contains the updated text string and pass the newly text in the next call
-
-                results, tool_messages = execute_tool(
-                    tools, assistant.tool_calls, tool_text_input=text_input
+                # Execute tools and get results
+                tool_messages = execute_tool(
+                    tools, assistant.tool_calls, input_files=messages.input_text_files
                 )
 
-                for tm in tool_messages:
+                # Add tool messages to conversation
+                for tm, atc in zip(tool_messages, assistant.tool_calls):
+                    tool_name = atc.function.name
+                    if tool_name == TEXT_EDITOR_TOOL["name"]:
+                        # Tool call for text editor
+                        messages.output_text_files = tm.call_response
+                        assistant.text_files = tm.call_response
                     messages = messages >> tm
 
                 turns += 1
 
-            return updated_text
+            return assistant
+        else:
+            raise ValueError("Expected max_turns to be positive integer")
 
     def _call_model_parse(
         self,
