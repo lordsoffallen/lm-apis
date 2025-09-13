@@ -1,6 +1,6 @@
 from lmapis.providers.openai import LMApi
-from lmapis.utils.messages import Messages, User, Assistant, System, Tool
-from pytest import raises, mark
+from lmapis.utils.messages import Messages, User, Assistant, Tool
+from pytest import mark
 from ..conftest import is_env_set
 import warnings
 

@@ -1,10 +1,11 @@
-import pytest
-from unittest.mock import Mock
-from lmapis.utils.tools import Tools, TEXT_EDITOR_TOOL, handle_text_editor_tool, execute_tool, _validate_format
+from lmapis.utils.tools import Tools, TEXT_EDITOR_TOOL, handle_text_editor_tool, \
+    execute_tool, _validate_format
 from lmapis.utils.messages import Tool
 from openai.types.chat.chat_completion_message_tool_call import \
     ChatCompletionMessageToolCall, Function
+
 import json
+import pytest
 
 
 def sample_function(param1: str, param2: int = 10):
