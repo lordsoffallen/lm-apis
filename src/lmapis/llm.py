@@ -475,8 +475,11 @@ class LLM:
                 messages = messages >> assistant
 
                 # Execute tools and get results
+                # Use the current state of text files (output_text_files if available, otherwise input_text_files)
+                current_text_files = messages.output_text_files \
+                    if messages.output_text_files is not None else messages.input_text_files
                 tool_messages = execute_tool(
-                    tools, assistant.tool_calls, input_files=messages.input_text_files
+                    tools, assistant.tool_calls, input_files=current_text_files
                 )
 
                 # Add tool messages to conversation
@@ -484,11 +487,19 @@ class LLM:
                     tool_name = atc.function.name
                     if tool_name == TEXT_EDITOR_TOOL["name"]:
                         # Tool call for text editor
-                        messages.output_text_files = tm.call_response
-                        assistant.text_files = tm.call_response
+                        if hasattr(tm, 'call_response') and tm.call_response is not None:
+                            # Successful edit - use the updated text
+                            messages.output_text_files = tm.call_response
+                        else:
+                            # View command or failed edit - preserve original text
+                            if messages.output_text_files is None:
+                                messages.output_text_files = messages.input_text_files
                     messages = messages >> tm
 
                 turns += 1
+
+            # Ensure the final assistant has the updated text files from the conversation
+            assistant.text_files = messages.output_text_files
 
             return assistant
         else:
