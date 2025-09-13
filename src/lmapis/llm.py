@@ -116,6 +116,7 @@ class LLM:
             # Extract response data
             response_content = None
             finish_reason = None
+            tool_calls = None
             tokens_prompt = None
             tokens_completion = None
             cost = None
@@ -129,11 +130,27 @@ class LLM:
                         logger.error("Failed to parse the model response to json")
                         response_content = ""
                     finish_reason = response.choices[0].finish_reason
+
+                    # Extract tool calls if present
+                    if (hasattr(response.choices[0].message, 'tool_calls') and
+                        response.choices[0].message.tool_calls):
+                        tool_calls = [
+                            tc.model_dump(mode="json")
+                            for tc in response.choices[0].message.tool_calls
+                        ]
                 else:
                     # Extract response content
                     if hasattr(response, 'choices') and response.choices:
                         response_content = response.choices[0].message.content
                         finish_reason = response.choices[0].finish_reason
+
+                        # Extract tool calls if present
+                        if (hasattr(response.choices[0].message, 'tool_calls')
+                            and response.choices[0].message.tool_calls):
+                            tool_calls = [
+                                tc.model_dump(mode="json")
+                                for tc in response.choices[0].message.tool_calls
+                            ]
                     else:
                         response_content = getattr(response, 'content', str(response))
                         finish_reason = getattr(response, 'stop_reason', 'unknown')
@@ -155,6 +172,7 @@ class LLM:
                 parameters=parameters,
                 response_content=response_content,
                 finish_reason=finish_reason,
+                tool_calls=tool_calls,
                 cost=cost,
                 tokens_prompt=tokens_prompt,
                 tokens_completion=tokens_completion,
