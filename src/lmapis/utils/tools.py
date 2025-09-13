@@ -12,9 +12,8 @@ TEXT_EDITOR_TOOL = {
     "name": "str_replace_based_edit_tool"
 }
 
-def handle_text_editor_tool(
-    tool_call: ChatCompletionMessageToolCall, text: str
-) -> Tool | tuple[str, Tool]:
+
+def handle_text_editor_tool(tool_call: ChatCompletionMessageToolCall, text: str) -> Tool:
     """
     Handle editor tool commands for string content.
 
@@ -23,7 +22,7 @@ def handle_text_editor_tool(
         text: The string content to operate on
 
     Returns:
-        Tool class and optionally modified text depending on the tool section
+        Tool call result
     """
     if tool_call.function.name != TEXT_EDITOR_TOOL["name"]:
         raise ValueError("This function is for str based edit tool")
@@ -60,10 +59,13 @@ def handle_text_editor_tool(
             )
         # Perform replacement
         updated_content = text.replace(old_str, new_str, 1)
-        return updated_content, Tool(
+        t = Tool(
             content=f"Text replaced successfully",
             tool_call_id=tool_call.id
         )
+        # Attached updated text to access later
+        t.call_response = updated_content
+        return t
     elif command == 'insert':
         insert_line = input_params.get('insert_line', 0)
         new_text = input_params.get('new_str', '')
@@ -80,10 +82,13 @@ def handle_text_editor_tool(
         lines.insert(insert_line, new_text)
         updated_content = '\n'.join(lines)
 
-        return updated_content, Tool(
+        t = Tool(
             content=f"Text inserted at line {insert_line}",
             tool_call_id=tool_call.id
         )
+        # Attached updated text to access later
+        t.call_response = updated_content
+        return t
     else:
         return Tool(
             content=f"Error: Unknown or unsupported command: {command}",
@@ -308,19 +313,19 @@ class Tools:
 def execute_tool(
     tools: Tools,
     tool_calls: list[ChatCompletionMessageToolCall] | ChatCompletionMessageToolCall,
-    tool_text_input: str = None,
-) -> tuple[list[Any], list[Tool]]:
+    input_files: Optional[list[str] | str] = None,
+) -> list[Tool]:
     """Executes registered tools based on the tool calls from the model.
 
     Args:
         tools: Defined tools for model api call
         tool_calls: List of tool calls from the model
-        tool_text_input: Text input for handle text editor function call
+        input_files: Text inputs for handle text editor function call
 
     Returns:
-        List of tuples containing (result, result_message) for each tool call
+        List of Tool call responses
     """
-    results = []
+
     messages = []
 
     if not isinstance(tool_calls, list):
@@ -348,22 +353,22 @@ def execute_tool(
             try:
                 validated_args = param_model(**arguments)
                 result = tool_func(**validated_args.model_dump())
-                results.append(result)
-                messages.append(
-                    Tool(content=json.dumps(result), tool_call_id=tool_call_id)
-                )
+                t = Tool(content=json.dumps(result), tool_call_id=tool_call_id)
+                t.call_response = result
+                messages.append(t)
             except ValidationError as e:
                 raise ValueError(f"Error in tool '{tool_name}' parameters: {e}")
         else:
             # Built in tool call
             if tool == TEXT_EDITOR_TOOL:
                 # User passes the tool function to run
+                if isinstance(input_files, list) and len(input_files) > 2:
+                    raise ValueError("Text Editor only works with a single file so far")
+                if input_files is None:
+                    raise ValueError("Input files are required for text editor call")
+                tool_text_input = input_files[0] if isinstance(input_files, list) else input_files
                 tool_msg = handle_text_editor_tool(tool_call, text=tool_text_input)
-                if isinstance(tool_msg, tuple):
-                    # unpack the results
-                    result, tool_msg = tool_msg
-                    results.append(result)
                 messages.append(tool_msg)
             else:
                 raise NotImplementedError(f"This tool is not implemented yet: {tool}")
-    return results, messages
+    return messages
