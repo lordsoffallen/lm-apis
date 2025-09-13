@@ -170,9 +170,9 @@ class Messages:
                 # Easy access for input/output files
                 if message.text_files is not None:
                     if isinstance(message, Assistant):
-                        self.output_text_files = message.text_files
+                        new_copy.output_text_files = message.text_files
                     elif isinstance(message, User):
-                        self.input_text_files = message.text_files
+                        new_copy.input_text_files = message.text_files
 
         return new_copy  # Return the modified copy
 

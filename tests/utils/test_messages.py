@@ -204,7 +204,7 @@ def test_api(envs):
     messages = Messages() >> User("Why is sky blue?")
 
     response = llm.client.chat.completions.create(
-        model="gpt-4o-mini", messages=messages
+        model="gpt-4o-mini", messages=messages.get()
     )
 
     print(response)
