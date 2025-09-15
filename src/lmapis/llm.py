@@ -2,12 +2,12 @@ from .utils.messages import Assistant, Messages, System, User
 from .logging import get_logger,LLMLogger, LogEntry
 from .utils.retry import should_retry_exception
 from .utils.tools import Tools, execute_tool, TEXT_EDITOR_TOOL
+from .exceptions import ProhibitedContentError, ContentFilterError, ModelRefusalError
 from openai.types.chat import ChatCompletion, ParsedChatCompletion
 from textwrap import dedent
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception
-from typing import Any, Optional, Callable
+from typing import Any, Optional
 from dataclasses import dataclass
-from functools import partial
 
 import time
 import uuid
@@ -54,6 +54,67 @@ def parse_finish_reason(output) -> str:
         finish_reason = output.stop_reason
     
     return finish_reason
+
+
+def check_for_content_errors(response: ChatCompletion | dict) -> None:
+    """
+    Check response for content filtering or refusal errors and raise appropriate exceptions.
+
+    Args:
+        response: The response object from the LLM API
+
+    Raises:
+        ProhibitedContentError: When content is filtered due to prohibited content
+        ContentFilterError: When content is filtered for other reasons
+        ModelRefusalError: When the model refuses to respond
+    """
+
+    # --- Normalize response ---
+    def to_dict(obj):
+        if isinstance(obj, dict):
+            return obj
+        if hasattr(obj, "model_dump"):  # Pydantic v2
+            return obj.model_dump()
+        if hasattr(obj, "dict"):  # Pydantic v1
+            return obj.dict()
+        if hasattr(obj, "to_dict"):  # Fallback
+            return obj.to_dict()
+        return dict(obj)  # Last resort
+
+    response_dict = to_dict(response)
+
+    # Choices handling
+    choices = response_dict.get("choices", [])
+    if not choices:
+        return  # No choices → no error check needed
+
+    choice = choices[0]
+    finish_reason = choice.get("finish_reason")
+
+
+    # Handle content filter cases
+    if finish_reason and 'content_filter' in finish_reason.lower():
+        if 'prohibited_content' in finish_reason.lower():
+            raise ProhibitedContentError(
+                f"Content was filtered due to prohibited content policy. "
+                f"Finish reason: {finish_reason}",
+                response=response_dict
+            )
+        else:
+            raise ContentFilterError(
+                f"Content was filtered. Finish reason: {finish_reason}",
+                filter_reason=finish_reason,
+                response=response_dict
+            )
+
+    message = choice.get("message", {})
+    refusal = message.get("refusal") if isinstance(message, dict) else None
+    if refusal:
+        raise ModelRefusalError(
+            f"Model refused to respond: {refusal}",
+            refusal_reason=refusal,
+            response=response_dict,
+        )
 
 
 class LLM:
@@ -256,6 +317,8 @@ class LLM:
         try:
             response = self._chat_completion(messages, **kwargs)
             end_time = time.time()
+
+            check_for_content_errors(response)
             
             self._log_interaction(
                 messages=messages.get(),
@@ -320,6 +383,8 @@ class LLM:
                 messages, response_format=response_format, **kwargs
             )
             end_time = time.time()
+
+            check_for_content_errors(response)
 
             self._log_interaction(
                 messages=messages.get(),
@@ -559,7 +624,12 @@ class LLM:
         if output.choices[0].message.refusal is not None:
             # Model didn't respond naturally so we raise error
             logger.error(f"Model response={output.to_dict()}")
-            raise ValueError("Model is finished with a refusal")
+            response_dict = output.to_dict() if hasattr(output, 'to_dict') else output.model_dump()
+            raise ModelRefusalError(
+                f"Model refused to respond: {output.choices[0].message.refusal}",
+                refusal_reason=output.choices[0].message.refusal,
+                response=response_dict
+            )
 
         cost = self.compute_cost(output)
 

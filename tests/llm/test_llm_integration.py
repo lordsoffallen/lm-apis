@@ -33,8 +33,8 @@ def get_env_var_for_backend(backend: str) -> str:
     env_var_map = {
         "openai": "OPENAI_API_KEY",
         "anthropic": "ANTHROPIC_API_KEY",
-        "google": "GOOGLE_API_KEY",
-        "google-genai": "GOOGLE_API_KEY",
+        "google": "GEMINI_API_KEY",
+        "google-genai": "GEMINI_API_KEY",
         "together": "TOGETHER_API_KEY",
         "fireworks": "FIREWORKS_API_KEY",
         "mistral": "MISTRAL_API_KEY"
@@ -61,7 +61,10 @@ class TestLLMIntegration:
             model=config["model"],
             cost=config["cost"],
             credentials=envs.get(env_var),
-            model_params=config.get("model_params", {})
+            model_params=config.get("model_params", {}),
+            logger=LLMLogger(
+                LoggerConfig(storage_backends=[Console()])
+            )
         )
 
     def _run_simple_prompt(self, llm: LLM, expected_answer: str) -> None:
