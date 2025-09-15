@@ -1,5 +1,6 @@
 from lmapis.providers.openai import LMApi
 from lmapis.utils.messages import Messages, User, Assistant, Tool
+from openai.types.chat.chat_completion_message_tool_call import Function, ChatCompletionMessageToolCall
 from pytest import mark
 from ..conftest import is_env_set
 import warnings
@@ -32,6 +33,25 @@ def test_assistant():
     assert len(output.get()) == 1
     assert all([isinstance(i, dict) for i in output.get()])
 
+
+def test_assistant_asdict():
+    assistant = Assistant(
+        None,
+        tool_calls=[
+            ChatCompletionMessageToolCall(
+                id="test_id",
+                function=Function(arguments="test arguments", name="test function"),
+                type="function"
+            )
+        ]
+    )
+
+    asd = assistant.asdict()
+
+    assert "content" in asd
+    assert "tool_calls" in asd
+
+
 def test_assistant_empty():
     content = "Why is sky blue?"
 
@@ -41,6 +61,22 @@ def test_assistant_empty():
     assert len(output.get()) == 1
     assert all([isinstance(i, dict) for i in output.get()])
 
+
+def test_assistant_empty_content_tool_calls():
+    output = Messages() >> Assistant(
+        None,
+        tool_calls=[
+            ChatCompletionMessageToolCall(
+                id="test_id",
+                function=Function(arguments="test arguments", name="test function"),
+                type="function"
+            )
+        ]
+    )
+
+    assert isinstance(output.get(), list)
+    assert len(output.get()) == 1
+    assert all([isinstance(i, dict) for i in output.get()])
 
 class TestTextFileProperties:
     """Test the new text_files properties for User and Assistant messages."""

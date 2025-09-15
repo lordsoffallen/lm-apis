@@ -115,6 +115,11 @@ class Assistant(BaseMessage):
         if "tool_calls" in d.keys():
             # Parse pydantic as dict here
             d["tool_calls"] = [i.model_dump(mode="python") for i in d["tool_calls"]]
+
+        if "content" not in d:
+            # content is none, add it back
+            d["content"] = None
+
         return d
 
 
@@ -164,7 +169,13 @@ class Messages:
     def add_message(self, message: BaseMessage = None) -> "Messages":
         new_copy = deepcopy(self)  # Create a copy first
         if message is not None:
-            if (message.content is not None) and (message.content != ""):
+            # Add message if it has content OR if it has tool calls (for Assistant messages)
+            has_content = (message.content is not None) and (message.content != "")
+            has_tool_calls = (hasattr(message, 'tool_calls') and
+                              message.tool_calls is not None and
+                              len(message.tool_calls) > 0)
+            
+            if has_content or has_tool_calls:
                 new_copy.messages.append(message)  # Store raw message object
 
                 # Easy access for input/output files
