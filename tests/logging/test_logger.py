@@ -167,6 +167,55 @@ class TestLLMLoggerInteractionLogging:
         
         assert logged_data['request_id'] == custom_id
     
+    def test_log_interaction_with_tool_calls(self):
+        """Test interaction logging with tool calls."""
+        mock_backend = MockStorageBackend()
+        config = LoggerConfig(storage_backends=[mock_backend])
+        logger = LLMLogger(config)
+        
+        tool_calls = [
+            {
+                "id": "call_abc123",
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "arguments": '{"location": "San Francisco"}'
+                }
+            },
+            {
+                "id": "call_def456",
+                "type": "function", 
+                "function": {
+                    "name": "calculate_sum",
+                    "arguments": '{"a": 5, "b": 3}'
+                }
+            }
+        ]
+        
+        log_entry = LogEntry.create(
+            model='gpt-4',
+            backend='openai',
+            messages=[{'role': 'user', 'content': 'What is the weather and what is 5+3?'}],
+            response_content='I will help you with both questions.',
+            finish_reason='tool_calls',
+            tool_calls=tool_calls,
+            cost=0.003,
+            tokens_prompt=20,
+            tokens_completion=8
+        )
+        
+        logger.log_interaction(log_entry)
+        
+        assert len(mock_backend.saved_data) == 1
+        logged_data = mock_backend.saved_data[0]
+        
+        assert logged_data['tool_calls'] == tool_calls
+        assert logged_data['finish_reason'] == 'tool_calls'
+        assert len(logged_data['tool_calls']) == 2
+        assert logged_data['tool_calls'][0]['function']['name'] == 'get_weather'
+        assert logged_data['tool_calls'][1]['function']['name'] == 'calculate_sum'
+        assert logged_data['response_content'] == 'I will help you with both questions.'
+    
     def test_log_interaction_disabled_logger(self):
         """Test that disabled logger doesn't log interactions."""
         mock_backend = MockStorageBackend()
@@ -219,6 +268,7 @@ class TestLLMLoggerInteractionLogging:
         assert logged_data.get('parameters') is None
         assert logged_data.get('response_content') is None
         assert logged_data.get('finish_reason') is None
+        assert logged_data.get('tool_calls') is None
         assert logged_data.get('cost') is None
         assert logged_data.get('tokens_prompt') is None
         assert logged_data.get('tokens_completion') is None

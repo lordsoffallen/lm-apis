@@ -63,6 +63,7 @@ class TestLogEntryCreation:
         assert entry.duration_ms == 1250
         assert entry.retry_count == 0
         assert entry.error is None
+        assert entry.tool_calls is None
     
     def test_create_error_log_entry(self):
         """Test creating a LogEntry for a failed request."""
@@ -93,6 +94,42 @@ class TestLogEntryCreation:
         
         assert entry.timestamp == custom_timestamp
         assert entry.request_id == custom_request_id
+    
+    def test_create_log_entry_with_tool_calls(self):
+        """Test creating a LogEntry with tool calls."""
+        tool_calls = [
+            {
+                "id": "call_abc123",
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "arguments": '{"location": "San Francisco"}'
+                }
+            },
+            {
+                "id": "call_def456", 
+                "type": "function",
+                "function": {
+                    "name": "calculate_sum",
+                    "arguments": '{"a": 5, "b": 3}'
+                }
+            }
+        ]
+        
+        entry = LogEntry.create(
+            model="gpt-4",
+            backend="openai",
+            messages=[{"role": "user", "content": "What's the weather and what's 5+3?"}],
+            response_content="I'll help you with both questions.",
+            tool_calls=tool_calls,
+            finish_reason="tool_calls"
+        )
+        
+        assert entry.tool_calls == tool_calls
+        assert entry.finish_reason == "tool_calls"
+        assert len(entry.tool_calls) == 2
+        assert entry.tool_calls[0]["function"]["name"] == "get_weather"
+        assert entry.tool_calls[1]["function"]["name"] == "calculate_sum"
 
 
 class TestLogEntrySanitization:
@@ -249,6 +286,37 @@ class TestLogEntrySanitization:
         assert sanitized.response_content != original_content
         assert "[EMAIL_REDACTED]" in sanitized.response_content
 
+    def test_sanitize_tool_calls(self):
+        """Test sanitization of sensitive data in tool calls."""
+        tool_calls = [
+            {
+                "id": "call_abc123",
+                "type": "function", 
+                "function": {
+                    "name": "send_email",
+                    "arguments": '{"to": "user@example.com", "api_key": "sk-1234567890abcdef1234567890abcdef1234567890abcdef"}'
+                }
+            }
+        ]
+        
+        entry = LogEntry.create(
+            model="gpt-4",
+            backend="openai",
+            tool_calls=tool_calls
+        )
+        
+        sanitized = entry.sanitize()
+        
+        # Original should be unchanged
+        assert "user@example.com" in str(entry.tool_calls)
+        assert "sk-1234567890abcdef1234567890abcdef1234567890abcdef" in str(entry.tool_calls)
+        
+        # Sanitized should have redacted sensitive data
+        assert "[EMAIL_REDACTED]" in str(sanitized.tool_calls)
+        assert "[API_KEY_REDACTED]" in str(sanitized.tool_calls)
+        assert "user@example.com" not in str(sanitized.tool_calls)
+        assert "sk-1234567890abcdef1234567890abcdef1234567890abcdef" not in str(sanitized.tool_calls)
+
 
 class TestLogEntryJSONSerialization:
     """Test JSON serialization and deserialization."""
@@ -304,6 +372,31 @@ class TestLogEntryJSONSerialization:
         assert data["tokens_completion"] == 5
         assert data["duration_ms"] == 500
         assert data["retry_count"] == 0
+    
+    def test_to_dict_with_tool_calls(self):
+        """Test dictionary conversion with tool calls."""
+        tool_calls = [
+            {
+                "id": "call_123",
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "arguments": '{"location": "NYC"}'
+                }
+            }
+        ]
+        
+        entry = LogEntry.create(
+            model="gpt-4",
+            backend="openai",
+            tool_calls=tool_calls,
+            finish_reason="tool_calls"
+        )
+        
+        data = entry.to_dict()
+        
+        assert data["tool_calls"] == tool_calls
+        assert data["finish_reason"] == "tool_calls"
     
     def test_to_json_compact(self):
         """Test compact JSON serialization."""
@@ -424,6 +517,38 @@ class TestLogEntryJSONSerialization:
         
         # Timestamps should be equal (within microsecond precision)
         assert abs((restored_entry.timestamp - original_entry.timestamp).total_seconds()) < 0.001
+    
+    def test_roundtrip_serialization_with_tool_calls(self):
+        """Test that tool calls are preserved through serialization roundtrip."""
+        tool_calls = [
+            {
+                "id": "call_abc123",
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "arguments": '{"location": "San Francisco", "units": "celsius"}'
+                }
+            }
+        ]
+        
+        original_entry = LogEntry.create(
+            model="gpt-4",
+            backend="openai",
+            messages=[{"role": "user", "content": "What's the weather?"}],
+            response_content="I'll check the weather for you.",
+            tool_calls=tool_calls,
+            finish_reason="tool_calls"
+        )
+        
+        # Convert to JSON and back
+        json_str = original_entry.to_json()
+        restored_entry = LogEntry.from_json(json_str)
+        
+        # Tool calls should be preserved exactly
+        assert restored_entry.tool_calls == original_entry.tool_calls
+        assert restored_entry.finish_reason == original_entry.finish_reason
+        assert len(restored_entry.tool_calls) == 1
+        assert restored_entry.tool_calls[0]["function"]["name"] == "get_weather"
 
 
 class TestLogEntryEdgeCases:

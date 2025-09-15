@@ -1,7 +1,8 @@
 from .utils.messages import Assistant, Messages, System, User
 from .logging import get_logger,LLMLogger, LogEntry
 from .utils.retry import should_retry_exception
-from .utils.tools import Tools
+from .utils.tools import Tools, execute_tool, TEXT_EDITOR_TOOL
+from .exceptions import ProhibitedContentError, ContentFilterError, ModelRefusalError
 from openai.types.chat import ChatCompletion, ParsedChatCompletion
 from textwrap import dedent
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception
@@ -53,6 +54,67 @@ def parse_finish_reason(output) -> str:
         finish_reason = output.stop_reason
     
     return finish_reason
+
+
+def check_for_content_errors(response: ChatCompletion | dict) -> None:
+    """
+    Check response for content filtering or refusal errors and raise appropriate exceptions.
+
+    Args:
+        response: The response object from the LLM API
+
+    Raises:
+        ProhibitedContentError: When content is filtered due to prohibited content
+        ContentFilterError: When content is filtered for other reasons
+        ModelRefusalError: When the model refuses to respond
+    """
+
+    # --- Normalize response ---
+    def to_dict(obj):
+        if isinstance(obj, dict):
+            return obj
+        if hasattr(obj, "model_dump"):  # Pydantic v2
+            return obj.model_dump()
+        if hasattr(obj, "dict"):  # Pydantic v1
+            return obj.dict()
+        if hasattr(obj, "to_dict"):  # Fallback
+            return obj.to_dict()
+        return dict(obj)  # Last resort
+
+    response_dict = to_dict(response)
+
+    # Choices handling
+    choices = response_dict.get("choices", [])
+    if not choices:
+        return  # No choices → no error check needed
+
+    choice = choices[0]
+    finish_reason = choice.get("finish_reason")
+
+
+    # Handle content filter cases
+    if finish_reason and 'content_filter' in finish_reason.lower():
+        if 'prohibited_content' in finish_reason.lower():
+            raise ProhibitedContentError(
+                f"Content was filtered due to prohibited content policy. "
+                f"Finish reason: {finish_reason}",
+                response=response_dict
+            )
+        else:
+            raise ContentFilterError(
+                f"Content was filtered. Finish reason: {finish_reason}",
+                filter_reason=finish_reason,
+                response=response_dict
+            )
+
+    message = choice.get("message", {})
+    refusal = message.get("refusal") if isinstance(message, dict) else None
+    if refusal:
+        raise ModelRefusalError(
+            f"Model refused to respond: {refusal}",
+            refusal_reason=refusal,
+            response=response_dict,
+        )
 
 
 class LLM:
@@ -115,6 +177,7 @@ class LLM:
             # Extract response data
             response_content = None
             finish_reason = None
+            tool_calls = None
             tokens_prompt = None
             tokens_completion = None
             cost = None
@@ -128,11 +191,27 @@ class LLM:
                         logger.error("Failed to parse the model response to json")
                         response_content = ""
                     finish_reason = response.choices[0].finish_reason
+
+                    # Extract tool calls if present
+                    if (hasattr(response.choices[0].message, 'tool_calls') and
+                        response.choices[0].message.tool_calls):
+                        tool_calls = [
+                            tc.model_dump(mode="json")
+                            for tc in response.choices[0].message.tool_calls
+                        ]
                 else:
                     # Extract response content
                     if hasattr(response, 'choices') and response.choices:
                         response_content = response.choices[0].message.content
                         finish_reason = response.choices[0].finish_reason
+
+                        # Extract tool calls if present
+                        if (hasattr(response.choices[0].message, 'tool_calls')
+                            and response.choices[0].message.tool_calls):
+                            tool_calls = [
+                                tc.model_dump(mode="json")
+                                for tc in response.choices[0].message.tool_calls
+                            ]
                     else:
                         response_content = getattr(response, 'content', str(response))
                         finish_reason = getattr(response, 'stop_reason', 'unknown')
@@ -154,6 +233,7 @@ class LLM:
                 parameters=parameters,
                 response_content=response_content,
                 finish_reason=finish_reason,
+                tool_calls=tool_calls,
                 cost=cost,
                 tokens_prompt=tokens_prompt,
                 tokens_completion=tokens_completion,
@@ -237,6 +317,8 @@ class LLM:
         try:
             response = self._chat_completion(messages, **kwargs)
             end_time = time.time()
+
+            check_for_content_errors(response)
             
             self._log_interaction(
                 messages=messages.get(),
@@ -301,6 +383,8 @@ class LLM:
                 messages, response_format=response_format, **kwargs
             )
             end_time = time.time()
+
+            check_for_content_errors(response)
 
             self._log_interaction(
                 messages=messages.get(),
@@ -367,9 +451,13 @@ class LLM:
         prompt: Prompt = None,
         messages: Messages = None,
         assistant_prefill: str | Assistant = None,
-        tools: list[dict] = None,
+        tools: Tools = None,
     ) -> Assistant:
         cost = 0
+
+        if tools:
+            tools = tools.format()
+
         extra_kwargs = dict(tools=tools) if tools is not None else {}
 
         messages = self.prepare_messages(
@@ -427,7 +515,7 @@ class LLM:
         prompt: Prompt = None,
         messages: Messages = None,
         assistant_prefill: str | Assistant = None,
-        tools: list[dict] = None,
+        tools: Tools = None,
         max_turns: int = 0,
         **kwargs,
     ) -> Assistant:
@@ -453,37 +541,53 @@ class LLM:
                 tools=tools,
             )
             return assistant
-        else:
-            raise NotImplementedError
-            # turns = 0
-            # messages = self.prepare_messages(
-            #     prompt=prompt, messages=messages, assistant_prefill=assistant_prefill
-            # )
-            # all_messages = messages.get(as_dict=False)
-            #
-            # while turns < max_turns:
-            #     assistant = self._call_model(messages=messages, tools=tools)
-            #
-            #     if not assistant.tool_calls:
-            #         return assistant
+        elif max_turns >= 1:
+            turns = 0
 
-                # TODO Make the tool call and return the response here
-            #     results, tool_messages = tools_instance.execute_tool(tool_calls)
-            #
-            #     # Add tool messages to intermediate messages
-            #     intermediate_messages.extend(tool_messages)
-            #
-            #     # Add the assistant's response and tool results to messages
-            #     messages.extend([response.choices[0].message, *tool_messages])
-            #
-            #     turns += 1
-            #
-            #     # Set the intermediate data in the final response
-            #     response.intermediate_responses = intermediate_responses[
-            #         :-1
-            #     ]  # Exclude final response
-            #     response.choices[0].intermediate_messages = intermediate_messages
-            #     return response
+            # We manage the whole messages history
+            messages = self.prepare_messages(
+                prompt=prompt, messages=messages, assistant_prefill=assistant_prefill
+            )
+            
+            while turns <= max_turns:
+                assistant = self._call_model(messages=messages, tools=tools)
+            
+                if not assistant.tool_calls:
+                    break
+
+                # First expand the messages with assistant response
+                messages = messages >> assistant
+
+                # Execute tools and get results
+                # Use the current state of text files (output_text_files if available, otherwise input_text_files)
+                current_text_files = messages.output_text_files \
+                    if messages.output_text_files is not None else messages.input_text_files
+                tool_messages = execute_tool(
+                    tools, assistant.tool_calls, input_files=current_text_files
+                )
+
+                # Add tool messages to conversation
+                for tm, atc in zip(tool_messages, assistant.tool_calls):
+                    tool_name = atc.function.name
+                    if tool_name == TEXT_EDITOR_TOOL["name"]:
+                        # Tool call for text editor
+                        if hasattr(tm, 'call_response') and tm.call_response is not None:
+                            # Successful edit - use the updated text
+                            messages.output_text_files = tm.call_response
+                        else:
+                            # View command or failed edit - preserve original text
+                            if messages.output_text_files is None:
+                                messages.output_text_files = messages.input_text_files
+                    messages = messages >> tm
+
+                turns += 1
+
+            # Ensure the final assistant has the updated text files from the conversation
+            assistant.text_files = messages.output_text_files
+
+            return assistant
+        else:
+            raise ValueError("Expected max_turns to be positive integer")
 
     def _call_model_parse(
         self,
@@ -491,8 +595,11 @@ class LLM:
         response_format: Any,
         prompt: Prompt = None,
         messages: Messages = None,
-        tools: list[dict] = None,
+        tools: Tools = None,
     ) -> Any:
+        if tools:
+            tools = tools.format()
+
         extra_kwargs = dict(tools=tools) if tools is not None else {}
 
         messages = self.prepare_messages(prompt=prompt, messages=messages)
@@ -517,7 +624,12 @@ class LLM:
         if output.choices[0].message.refusal is not None:
             # Model didn't respond naturally so we raise error
             logger.error(f"Model response={output.to_dict()}")
-            raise ValueError("Model is finished with a refusal")
+            response_dict = output.to_dict() if hasattr(output, 'to_dict') else output.model_dump()
+            raise ModelRefusalError(
+                f"Model refused to respond: {output.choices[0].message.refusal}",
+                refusal_reason=output.choices[0].message.refusal,
+                response=response_dict
+            )
 
         cost = self.compute_cost(output)
 

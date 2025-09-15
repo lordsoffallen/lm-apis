@@ -142,6 +142,7 @@ class LLMLogger:
             parameters=log_entry.parameters if self.config.should_include_request_data() else None,
             response_content=log_entry.response_content if self.config.should_include_response_data() else None,
             finish_reason=log_entry.finish_reason if self.config.should_include_response_data() else None,
+            tool_calls=log_entry.tool_calls if self.config.should_include_response_data() else None,
             cost=log_entry.cost if self.config.should_include_cost_data() else None,
             tokens_prompt=log_entry.tokens_prompt if self.config.should_include_cost_data() else None,
             tokens_completion=log_entry.tokens_completion if self.config.should_include_cost_data() else None,

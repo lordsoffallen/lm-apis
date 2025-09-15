@@ -36,6 +36,7 @@ class LogEntry:
     # Response data
     response_content: Optional[str] = None
     finish_reason: Optional[str] = None
+    tool_calls: Optional[List[Dict[str, Any]]] = None
     
     # Cost and performance metrics
     cost: Optional[float] = None
@@ -56,6 +57,7 @@ class LogEntry:
         parameters: Optional[Dict[str, Any]] = None,
         response_content: Optional[str] = None,
         finish_reason: Optional[str] = None,
+        tool_calls: Optional[List[Dict[str, Any]]] = None,
         cost: Optional[float] = None,
         tokens_prompt: Optional[int] = None,
         tokens_completion: Optional[int] = None,
@@ -75,6 +77,7 @@ class LogEntry:
             parameters: Request parameters (temperature, max_tokens, etc.)
             response_content: The generated response content
             finish_reason: Why the model stopped generating
+            tool_calls: List of tool calls made by the model (if any)
             cost: Total cost of the request in dollars
             tokens_prompt: Number of prompt tokens used
             tokens_completion: Number of completion tokens generated
@@ -96,6 +99,7 @@ class LogEntry:
             parameters=parameters,
             response_content=response_content,
             finish_reason=finish_reason,
+            tool_calls=tool_calls,
             cost=cost,
             tokens_prompt=tokens_prompt,
             tokens_completion=tokens_completion,
@@ -138,6 +142,7 @@ class LogEntry:
             parameters=sanitized_data.get("parameters"),
             response_content=sanitized_data.get("response_content"),
             finish_reason=sanitized_data.get("finish_reason"),
+            tool_calls=sanitized_data.get("tool_calls"),
             cost=sanitized_data.get("cost"),
             tokens_prompt=sanitized_data.get("tokens_prompt"),
             tokens_completion=sanitized_data.get("tokens_completion"),
@@ -186,7 +191,7 @@ class LogEntry:
         ]
         
         # Apply sanitization to string fields
-        for field_name in ['messages', 'parameters', 'response_content', 'error']:
+        for field_name in ['messages', 'parameters', 'response_content', 'tool_calls', 'error']:
             if field_name in data and data[field_name] is not None:
                 data[field_name] = self._sanitize_field(data[field_name], sensitive_patterns)
         
