@@ -699,6 +699,7 @@ class TestLLMUnit:
         mock_response.choices = [Mock()]
         mock_response.choices[0].message.content = "Test response"
         mock_response.choices[0].finish_reason = "stop"
+        mock_response.choices[0].message.tool_calls = None  # Explicitly set to None
         mock_response.usage.prompt_tokens = 10
         mock_response.usage.completion_tokens = 5
         mock_chat_completion.return_value = mock_response

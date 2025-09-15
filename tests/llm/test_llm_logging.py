@@ -43,6 +43,7 @@ class TestLLMLoggingIntegration:
         mock_response.choices = [Mock()]
         mock_response.choices[0].message.content = "Test response content"
         mock_response.choices[0].finish_reason = "stop"
+        mock_response.choices[0].message.tool_calls = None  # Explicitly set to None
         mock_response.usage.prompt_tokens = 10
         mock_response.usage.completion_tokens = 20
 
@@ -282,6 +283,7 @@ class TestLLMLoggingIntegration:
         mock_response.choices = [Mock()]
         mock_response.choices[0].message.content = "Success after retries"
         mock_response.choices[0].finish_reason = "stop"
+        mock_response.choices[0].message.tool_calls = None  # Explicitly set to None
         mock_response.usage.prompt_tokens = 10
         mock_response.usage.completion_tokens = 20
 
@@ -329,6 +331,7 @@ class TestLLMLoggingIntegration:
         mock_response.choices = [Mock()]
         mock_response.choices[0].message.content = "Claude response"
         mock_response.choices[0].finish_reason = "stop"
+        mock_response.choices[0].message.tool_calls = None  # Explicitly set to None
         mock_response.usage.prompt_tokens = 15
         mock_response.usage.completion_tokens = 25
 
@@ -374,6 +377,7 @@ class TestLLMLoggingIntegration:
         mock_response.choices = [Mock()]
         mock_response.choices[0].message.content = "Continued response"
         mock_response.choices[0].finish_reason = "stop"
+        mock_response.choices[0].message.tool_calls = None  # Explicitly set to None
         mock_response.usage.prompt_tokens = 20
         mock_response.usage.completion_tokens = 30
 
@@ -424,6 +428,7 @@ class TestLLMLoggingIntegration:
         mock_response.choices = [Mock()]
         mock_response.choices[0].message.content = "Full call response"
         mock_response.choices[0].finish_reason = "stop"
+        mock_response.choices[0].message.tool_calls = None  # Explicitly set to None
         mock_response.usage.prompt_tokens = 25
         mock_response.usage.completion_tokens = 35
 
