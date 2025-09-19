@@ -43,9 +43,14 @@ class BaseMessage:
         """ Removes class attributes that starts with __ from the dict conversion """
         d = asdict(self)
 
+        # Handle both __ prefixed and name-mangled attributes (python fuck you)
+        keys_to_remove = []
         for k in d:
-            if k.startswith("__"):
-                d.pop(k)
+            if k.startswith("__") or k.startswith(f"_{type(self).__name__}__"):
+                keys_to_remove.append(k)
+
+        for k in keys_to_remove:
+            d.pop(k)
         return d
 
 
