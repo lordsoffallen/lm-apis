@@ -215,6 +215,8 @@ class TestMessageAsDict:
         
         # Should not contain private attributes
         assert "__file_inputs" not in result
+        assert "_User__file_inputs" not in result
+        assert len(result.keys()) == 2
         assert "role" in result
         assert "content" in result
     
